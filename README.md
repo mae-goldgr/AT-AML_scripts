@@ -4,6 +4,8 @@ Manuscript: Goldgraben et al Pediatric Blood and Cancer 2020
 
 
 Scripts used in publication & this repo is no longer in development.
+BAMs (GRCh37) and VCFs are available on EGA 
+
 
 #########################
 ### GERMLINE Analysis ###
