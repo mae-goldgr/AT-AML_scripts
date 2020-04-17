@@ -1,0 +1,777 @@
+---
+title: "Rsession_05_data_clean_up_IHCAP75"
+author: "Mae Goldgraben"
+date: "06Jun2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+last updated: Mae Goldgraben, 06Jun2018  
+
+# Summary
+
+The script performs the following:  
+
+- check the data  
+
+- restructure and remove excess columns from vv file  
+
+- explore the multi-allelic variants & where DP values are NA (they were the same, so removed)  
+
+- split IHCAP75 samples out of the cohort (line 163)  
+
+- trim for variants only in the IHCAP75  
+
+- explore variants in IHCAP75 germline only  
+
+- select LOFMIS deldam variants  
+
+- explore LOFMIS variants in IHCAP75 germline only  
+
+- merge and export vv_gt file  
+
+- save data  
+
+# start_section  
+
+```{r start_section}
+
+# Time stamp
+Sys.time()
+
+# Clean up
+rm(list=ls())
+
+# Load libraries
+library(knitr)
+library(dplyr)
+
+# Folders
+setwd("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters")
+source_data_folder <- "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/source_data"
+interim_data_folder <- "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/interim_data"
+
+```
+
+# load_data  
+
+```{r load_data}
+
+load(paste(interim_data_folder, "Rsession_04_add_eve_germ.RData", sep="/"))
+
+#a <- cleaned_vv_rare_eve.df[cleaned_vv_rare_eve.df$SYMBOL == "ATM",]
+```
+
+# check_data  
+
+```{r check_data}
+ls()
+
+dim(cleaned_gt_rare.mx)
+class(cleaned_gt_rare.mx)
+cleaned_gt_rare.mx[1:5,1:5]
+
+dim(cleaned_vv_rare_eve.df)
+class(cleaned_vv_rare_eve.df)
+cleaned_vv_rare_eve.df[1:5,1:5]
+
+dim(cleaned_gt_rarest.mx)
+class(cleaned_gt_rarest.mx)
+cleaned_gt_rarest.mx[1:5,1:5]
+
+dim(cleaned_vv_rarest_eve.df)
+class(cleaned_vv_rarest_eve.df)
+cleaned_vv_rarest_eve.df[1:5,1:5]
+
+# Check consistency of colnames and rownames
+sum(rownames(cleaned_gt_rare.mx) != rownames(cleaned_vv_rare_eve.df))
+sum(rownames(cleaned_gt_rarest.mx) != rownames(cleaned_vv_rarest_eve.df))
+
+```
+
+# select_fewer_columns_for_variant_annotation_files  
+
+```{r select_fewer_columns_for_variant_annotation_files}
+
+colnames(cleaned_vv_rare_eve.df)
+sum(is.na(cleaned_vv_rare_eve.df$ID)) # 1,724
+sum(is.na(cleaned_vv_rare_eve.df$Existing_variation)) # 433 therefore propagate this one
+
+cleaned_vv_rare.df <- cleaned_vv_rare_eve.df %>% select(SplitVarID, TYPE, Existing_variation, CHROM, POS, REF, ALT, SYMBOL, IMPACT, Consequence, Location, cDNA_position, CDS_position, EXON, INTRON, Codons, Protein_position, Amino_acids, CLIN_SIG, SIFT_call, SIFT_score, PolyPhen_call, PolyPhen_score, 
+              DOMAINS, HGVSc, HGVSp, HGNC_ID, QUAL, DP, Multiallelic, NEAREST, Feature_type, Feature, 
+              MAX_AF, MAX_AF_POPS, kgen_AF, kgen_EUR_AF, exac_non_TCGA_AF, exac_non_TCGA_NFE_AF, gnomAD_AF, gnomAD_NFE_AF, EVE_COMBINED_SCORE, EVE_Cscore, EVE_COMBINED_SCORE_EUR, EVE_Cscore_EUR, EVE, EVE_score, EUR_EVE, EUR_EVE_score, IH_AC, IH_AN, IH_AF)
+
+dim(cleaned_vv_rare.df) # 10,284 x 52
+colnames(cleaned_vv_rare.df)
+
+#---
+colnames(cleaned_vv_rarest_eve.df)
+sum(is.na(cleaned_vv_rarest_eve.df$ID)) # 1,709
+sum(is.na(cleaned_vv_rarest_eve.df$Existing_variation)) # 421 therefore propagate this one
+
+cleaned_vv_rarest.df <- cleaned_vv_rarest_eve.df %>% select(SplitVarID, TYPE, Existing_variation, CHROM, POS, REF, ALT, SYMBOL, IMPACT, Consequence, Location, cDNA_position, CDS_position, EXON, INTRON, Codons, Protein_position, Amino_acids, CLIN_SIG, SIFT_call, SIFT_score, PolyPhen_call, PolyPhen_score, 
+              DOMAINS, HGVSc, HGVSp, HGNC_ID, QUAL, DP, Multiallelic, NEAREST, Feature_type, Feature, 
+              MAX_AF, MAX_AF_POPS, kgen_AF, kgen_EUR_AF, exac_non_TCGA_AF, exac_non_TCGA_NFE_AF, gnomAD_AF, gnomAD_NFE_AF, EVE_COMBINED_SCORE, EVE_Cscore, EVE_COMBINED_SCORE_EUR, EVE_Cscore_EUR, EVE, EVE_score, EUR_EVE, EUR_EVE_score, IH_AC, IH_AN, IH_AF)
+
+dim(cleaned_vv_rarest.df) # 5,993 x 52
+colnames(cleaned_vv_rarest.df)
+
+# Clean-up
+rm(cleaned_vv_rarest_eve.df, cleaned_vv_rare_eve.df)
+
+```
+
+# explore_multiallelic_variants_and_remove_DP_values_of_NA
+
+```{r explore_multiallelic_variants_and_remove_DP_values_of_NA}
+
+# Explore Multiallelic & DP in 0.05 MAF filtered
+nrow(cleaned_vv_rare.df) # 10,284
+sum(cleaned_vv_rare.df$Multiallelic) # 571
+sum(cleaned_vv_rare.df$Multiallelic & (cleaned_vv_rare.df$TYPE == "INDEL")) # 511
+sum(cleaned_vv_rare.df$Multiallelic & (is.na(cleaned_vv_rare.df$DP))) # 571
+multi.vv.df <- cleaned_vv_rare.df[(cleaned_vv_rare.df$Multiallelic),]
+dim(multi.vv.df) # 571 x 52
+sum(is.na(multi.vv.df$DP)) # 571 they are the same variants! 
+
+# Remove DP NAs from vv & gt
+cleaned_vv_rare.df <- cleaned_vv_rare.df[!(is.na(cleaned_vv_rare.df$DP)),]
+nrow(cleaned_vv_rare.df) # 9,713
+sum(cleaned_vv_rare.df$Multiallelic) # 0
+dim(cleaned_gt_rare.mx) # 10,284 x 8
+cleaned_gt_rare.mx <- cleaned_gt_rare.mx[row.names(cleaned_vv_rare.df),]
+dim(cleaned_gt_rare.mx) # 9,713 x 8
+
+#----
+
+# Explore Multiallelic & DP in 0.01 MAF filtered
+nrow(cleaned_vv_rarest.df) # 5,993
+sum(cleaned_vv_rarest.df$Multiallelic) # 569
+sum(cleaned_vv_rarest.df$Multiallelic & (cleaned_vv_rarest.df$TYPE == "INDEL")) # 510
+sum(cleaned_vv_rarest.df$Multiallelic & (is.na(cleaned_vv_rarest.df$DP))) # 569
+multi2.vv.df <- cleaned_vv_rarest.df[(cleaned_vv_rarest.df$Multiallelic),]
+dim(multi2.vv.df) # 569 x 52
+sum(is.na(multi2.vv.df$DP)) # 569 they are the same variants! 
+
+# Remove DP NAs from vv & gt
+cleaned_vv_rarest.df <- cleaned_vv_rarest.df[!(is.na(cleaned_vv_rarest.df$DP)),]
+nrow(cleaned_vv_rarest.df) # 5,424
+sum(cleaned_vv_rarest.df$Multiallelic) # 0
+dim(cleaned_gt_rarest.mx) # 5,993 x 8
+cleaned_gt_rarest.mx <- cleaned_gt_rarest.mx[row.names(cleaned_vv_rarest.df),]
+dim(cleaned_gt_rarest.mx) # 5,424 x 8
+
+# Clean-up
+rm(multi.vv.df, multi2.vv.df)
+
+```
+
+# trim_uniform_variants_across_unrelated_samples
+
+```{r trim_uniform_variants_across_unrelated_samples}
+
+# Create function to detect uniform numeric vector
+uniform_vector.udf <- function(x){
+  if(min(x, na.rm=TRUE) == max(x, na.rm=TRUE)){return(TRUE)} else {return(FALSE)}}
+
+# Variants with uniform genotypes across all samples (All REF, All HET, All HOM)
+uniform_genotypes <- apply(cleaned_gt_rare.mx, 1, uniform_vector.udf)
+summary(uniform_genotypes) # 0
+
+uniform_vector.0.udf <- function(x){
+  if(min(x, na.rm=TRUE) == 0 & max(x, na.rm=TRUE) == 0){return(TRUE)} else {return(FALSE)}}
+uniform_genotypes0 <- apply(cleaned_gt_rare.mx, 1, uniform_vector.0.udf)
+summary(uniform_genotypes0) # 0
+
+uniform_vector.1.udf <- function(x){
+  if(min(x, na.rm=TRUE) == 1 & max(x, na.rm=TRUE) == 1){return(TRUE)} else {return(FALSE)}}
+uniform_genotypes1 <- apply(cleaned_gt_rare.mx, 1, uniform_vector.1.udf)
+summary(uniform_genotypes1) # 0
+
+uniform_vector.2.udf <- function(x){
+  if(min(x, na.rm=TRUE) == 2 & max(x, na.rm=TRUE) == 2){return(TRUE)} else {return(FALSE)}}
+uniform_genotypes2 <- apply(cleaned_gt_rare.mx, 1, uniform_vector.2.udf)
+summary(uniform_genotypes2) # 0
+
+# Remove variants with uniform genotypes across all samples from gt and vv files
+cleaned_gt_rare.mx <- cleaned_gt_rare.mx[!uniform_genotypes,]
+dim(cleaned_gt_rare.mx) # 9713 x 8
+
+# Trim vv file to match gt
+vars <- as.vector(rownames(cleaned_gt_rare.mx))
+cleaned_vv_rare.df <- cleaned_vv_rare.df[vars,]
+dim(cleaned_vv_rare.df) # 9713 x 52
+
+# Clean-up
+rm(uniform_genotypes, uniform_genotypes0, uniform_genotypes1, uniform_genotypes2,
+   uniform_vector.udf, uniform_vector.0.udf, uniform_vector.1.udf, uniform_vector.2.udf,
+   vars)
+
+```
+
+# split_off_the_IHCAP75_samples_rare
+
+```{r split_off_the_IHCAP75_samples_rare}
+
+# Split the IHCAP75
+ihcap75_gt_rare.mx <- cleaned_gt_rare.mx[,grepl("IHCAP_75", colnames(cleaned_gt_rare.mx))]
+dim(ihcap75_gt_rare.mx) # 9,713 x 5
+
+# Trim gt mx to variants present in IHCAP75 - Remove gts all NA & with incomplete call rate
+call_rate.udf <- function(x){sum(!is.na(x))/length(x)}
+ihcap_call_rate <- apply(ihcap75_gt_rare.mx,1,call_rate.udf)
+table(ihcap_call_rate) # some nas for all 5 or 4/5, need to remove and unreliable calls
+good_ihcap_variants <- ihcap_call_rate >= 0.8
+summary(good_ihcap_variants) # 9,499
+
+sum(is.na(ihcap75_gt_rare.mx)) # 907
+NA -> ihcap75_gt_rare.mx[!good_ihcap_variants,]
+sum(is.na(ihcap75_gt_rare.mx)) # 1,519
+dim(ihcap75_gt_rare.mx) # 9,713 x 5
+
+count_nas.udf <- function(x){sum(is.na(x))}
+num_of_nas <- apply(ihcap75_gt_rare.mx, 1, count_nas.udf)
+very_poor_variants <- num_of_nas == ncol(ihcap75_gt_rare.mx)
+summary(very_poor_variants) # 214
+
+dim(ihcap75_gt_rare.mx) # 9,713 x 5
+cleaned_ihcap75_gt_rare.mx <- ihcap75_gt_rare.mx[!very_poor_variants,]
+dim(cleaned_ihcap75_gt_rare.mx) # 9,499 x 5
+
+# Create function to detect uniform genotypes across all samples (All REF, All HET, All HOM)
+uniform_vector.udf <- function(x){
+  if(min(x, na.rm=TRUE) == max(x, na.rm=TRUE)){return(TRUE)} else {return(FALSE)}}
+uniform_genotypes <- apply(cleaned_ihcap75_gt_rare.mx, 1, uniform_vector.udf)
+summary(uniform_genotypes) # 8967 but only the HOM REF need removing...
+
+uniform_vector.0.udf <- function(x){
+  if(min(x, na.rm=TRUE) == 0 & max(x, na.rm=TRUE) == 0){return(TRUE)} else {return(FALSE)}}
+uniform_genotypes0 <- apply(cleaned_ihcap75_gt_rare.mx, 1, uniform_vector.0.udf)
+summary(uniform_genotypes0) # 5251
+
+# Remove variants with uniform genotypes across all samples from gt and vv files
+cleaned_ihcap75_gt_rare.mx <- cleaned_ihcap75_gt_rare.mx[!uniform_genotypes0,]
+dim(cleaned_ihcap75_gt_rare.mx) # 4248 x 8
+
+# Trim vv file to match gt
+ihcap_vars <- as.vector(rownames(cleaned_ihcap75_gt_rare.mx))
+cleaned_ihcap75_vv_rare.df <- cleaned_vv_rare.df[ihcap_vars,]
+dim(cleaned_ihcap75_vv_rare.df) # 4248 x 52
+
+# Clean-up
+rm(ihcap75_gt_rare.mx, call_rate.udf, count_nas.udf, ihcap_vars,
+   ihcap_call_rate, good_ihcap_variants, num_of_nas, very_poor_variants,
+   uniform_genotypes, uniform_genotypes0, uniform_vector.udf, uniform_vector.0.udf)
+
+```
+
+# split_off_the_IHCAP75_samples_rarest
+
+```{r split_off_the_IHCAP75_samples_rarest}
+
+# Split the IHCAP75
+ihcap75_gt_rarest.mx <- cleaned_gt_rarest.mx[,grepl("IHCAP_75", colnames(cleaned_gt_rarest.mx))]
+dim(ihcap75_gt_rarest.mx) # 5,424 x 5
+
+# Trim gt mx to variants present in IHCAP75 - Remove gts all NA & with incomplete call rate
+call_rate.udf <- function(x){sum(!is.na(x))/length(x)}
+ihcap_call_rate <- apply(ihcap75_gt_rarest.mx,1,call_rate.udf)
+table(ihcap_call_rate) # some nas for all 5 or 4/5, need to remove and unreliable calls
+good_ihcap_variants <- ihcap_call_rate >= 0.8
+summary(good_ihcap_variants) # 5,272
+
+sum(is.na(ihcap75_gt_rarest.mx)) # 907
+NA -> ihcap75_gt_rarest.mx[!good_ihcap_variants,]
+sum(is.na(ihcap75_gt_rarest.mx)) # 1,072
+dim(ihcap75_gt_rarest.mx) # 5,424 x 5
+
+count_nas.udf <- function(x){sum(is.na(x))}
+num_of_nas <- apply(ihcap75_gt_rarest.mx, 1, count_nas.udf)
+very_poor_variants <- num_of_nas == ncol(ihcap75_gt_rarest.mx)
+summary(very_poor_variants) # 152
+
+dim(ihcap75_gt_rarest.mx) # 5,424 x 5
+cleaned_ihcap75_gt_rarest.mx <- ihcap75_gt_rarest.mx[!very_poor_variants,]
+dim(cleaned_ihcap75_gt_rarest.mx) #5,272 x 5
+
+# Create function to detect uniform genotypes across all samples (All REF, All HET, All HOM)
+uniform_vector.udf <- function(x){
+  if(min(x, na.rm=TRUE) == max(x, na.rm=TRUE)){return(TRUE)} else {return(FALSE)}}
+uniform_genotypes <- apply(cleaned_ihcap75_gt_rarest.mx, 1, uniform_vector.udf)
+summary(uniform_genotypes) # 4820 but only the HOM REF need removing...
+
+uniform_vector.0.udf <- function(x){
+  if(min(x, na.rm=TRUE) == 0 & max(x, na.rm=TRUE) == 0){return(TRUE)} else {return(FALSE)}}
+uniform_genotypes0 <- apply(cleaned_ihcap75_gt_rarest.mx, 1, uniform_vector.0.udf)
+summary(uniform_genotypes0) # 2,541
+
+# Remove variants with uniform genotypes across all samples from gt and vv files
+cleaned_ihcap75_gt_rarest.mx <- cleaned_ihcap75_gt_rarest.mx[!uniform_genotypes0,]
+dim(cleaned_ihcap75_gt_rarest.mx) # 2,731 x 5
+
+# Trim vv file to match gt
+ihcap_vars <- as.vector(rownames(cleaned_ihcap75_gt_rarest.mx))
+cleaned_ihcap75_vv_rarest.df <- cleaned_vv_rarest.df[ihcap_vars,]
+dim(cleaned_ihcap75_vv_rarest.df) # 2,731 x 52
+
+# Clean-up
+rm(ihcap75_gt_rarest.mx, call_rate.udf, count_nas.udf, ihcap_vars,
+   ihcap_call_rate, good_ihcap_variants, num_of_nas, very_poor_variants,
+   uniform_genotypes, uniform_genotypes0, uniform_vector.udf, uniform_vector.0.udf)
+
+```
+
+# merge_vv_into_gt.mx_and_export_for_all_IHCAP75
+
+```{r merge_vv_into_gt.mx_and_export_for_all_IHCAP75}
+
+# Export merged vv & gt files - all uncommon IHCAP75 variants
+sum(rownames(cleaned_ihcap75_vv_rare.df) != rownames(cleaned_ihcap75_gt_rare.mx))
+ihcap75_rare_merged.mx <- as.matrix(merge(cleaned_ihcap75_vv_rare.df, cleaned_ihcap75_gt_rare.mx, by="row.names"))
+dim(ihcap75_rare_merged.mx) # 4,248 x 58
+write.table(ihcap75_rare_merged.mx, "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/results/ihcap75_rare_gtvv.txt", quote = FALSE, sep = "\t", row.names=FALSE, col.names=TRUE)
+
+sum(rownames(cleaned_ihcap75_vv_rarest.df) != rownames(cleaned_ihcap75_gt_rarest.mx))
+ihcap75_rarest_merged.mx <- as.matrix(merge(cleaned_ihcap75_vv_rarest.df, cleaned_ihcap75_gt_rarest.mx, by="row.names"))
+dim(ihcap75_rarest_merged.mx) # 2,731 x 58
+write.table(ihcap75_rarest_merged.mx, "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/results/ihcap75_rarest_gtvv.txt", quote = FALSE, sep = "\t", row.names=FALSE, col.names=TRUE)
+
+```
+
+# explore_all_ihcap75G_vars
+
+```{r explore_all_ihcap75G_vars}
+
+# check for ATM variant - added & !(is.na)
+a <- cleaned_ihcap75_vv_rare.df[cleaned_ihcap75_vv_rare.df$SYMBOL == "ATM" & !is.na(cleaned_ihcap75_vv_rare.df$SYMBOL),] 
+# Old: a <- cleaned_ihcap75_vv_rare.df[cleaned_ihcap75_vv_rare.df$SYMBOL == "ATM",]
+a
+b <- cleaned_ihcap75_vv_rarest.df[cleaned_ihcap75_vv_rarest.df$SYMBOL == "ATM" & !is.na(cleaned_ihcap75_vv_rarest.df$SYMBOL),] 
+# Old: b <- cleaned_ihcap75_vv_rarest.df[cleaned_ihcap75_vv_rarest.df$SYMBOL == "ATM",]
+b
+
+# SELECT VARS ONLY IN GERMLINE SAMPLE
+
+## can't run dplyr on matrix, can pipe though
+## cleaned_ihcap75G_gt_rare.df <- as.data.frame(cleaned_ihcap75_gt_rare.mx) %>% filter(IHCAP_75_1A >=1 & !is.na(IHCAP_75_1A))
+
+# Rare variants
+sum(rownames(cleaned_ihcap75_vv_rare.df) != rownames(cleaned_ihcap75_gt_rare.mx))
+rare_merge_new.df <- cbind(cleaned_ihcap75_vv_rare.df, cleaned_ihcap75_gt_rare.mx)
+class(rare_merge_new.df)
+ihcap75G_merge_rare.df <- filter(rare_merge_new.df, IHCAP_75_1A >=1 & !is.na(rare_merge_new.df$IHCAP_75_1A))
+dim(ihcap75G_merge_rare.df) # 4114 x 57
+table(ihcap75G_merge_rare.df$CHROM)
+#ihcap75G_merge_rare.df <- filter(ihcap75G_merge_rare.df, CHROM != "Y" & CHROM != "MT")
+#dim(ihcap75G_merge_rare.df)
+
+# Rarest variants
+sum(rownames(cleaned_ihcap75_vv_rarest.df) != rownames(cleaned_ihcap75_gt_rarest.mx))
+rarest_merge_new.df <- cbind(cleaned_ihcap75_vv_rarest.df, cleaned_ihcap75_gt_rarest.mx)
+class(rarest_merge_new.df)
+ihcap75G_merge_rarest.df <- filter(rarest_merge_new.df, IHCAP_75_1A >=1 & !is.na(rarest_merge_new.df$IHCAP_75_1A))
+dim(ihcap75G_merge_rarest.df) # 2600 x 57
+table(ihcap75G_merge_rarest.df$CHROM)
+#ihcap75G_merge_rarest.df <- filter(ihcap75G_merge_rarest.df, CHROM != "Y" & CHROM != "MT")
+#dim(ihcap75G_merge_rarest.df)
+
+# explore INDELs
+rare_indels.df <- ihcap75G_merge_rare.df[ihcap75G_merge_rare.df$TYPE == "INDEL",]
+dim(rare_indels.df) # 531 x 57
+summary(rare_indels.df$Consequence)
+a <- strsplit(as.vector(rare_indels.df$Consequence),"&")
+b <- unique(as.vector(unlist(a)))
+b
+
+rarest_indels.df <- ihcap75G_merge_rarest.df[ihcap75G_merge_rarest.df$TYPE == "INDEL",]
+dim(rarest_indels.df) # 473 x 57
+summary(rarest_indels.df$Consequence)
+
+# explore SNVs
+rare_snv.df <- ihcap75G_merge_rare.df[ihcap75G_merge_rare.df$TYPE == "SNP",]
+dim(rare_snv.df) # 3,583 x 57
+summary(rare_snv.df$Consequence)
+
+rarest_snv.df <- ihcap75G_merge_rarest.df[ihcap75G_merge_rarest.df$TYPE == "SNP",]
+dim(rarest_snv.df) # 2,127 x 57
+summary(rarest_snv.df$Consequence)
+
+# clean-up
+rm (a, b, ihcap75_rare_merged.mx, ihcap75_rarest_merged.mx)
+rm (rare_merge_new.df, rarest_merge_new.df, rare_indels.df, rarest_indels.df, rare_snv.df, rarest_snv.df)
+
+```
+
+# filter_vv_on_consequence_rare
+
+```{r filter_vv_on_consequence_rare}
+
+sum(rownames(cleaned_ihcap75_gt_rare.mx) != rownames(cleaned_ihcap75_vv_rare.df))
+nrow(cleaned_ihcap75_vv_rare.df) #  4248
+
+# CLIN_SIG
+a <- strsplit(as.vector(cleaned_ihcap75_vv_rare.df$CLIN_SIG),"&")
+b <- unique(as.vector(unlist(a)))
+b
+
+# Filter on consequence - Part1
+clin_sig <- cleaned_ihcap75_vv_rare.df[grepl("pathogenic", cleaned_ihcap75_vv_rare.df$CLIN_SIG) |
+                                     grepl("risk_factor", cleaned_ihcap75_vv_rare.df$CLIN_SIG),]
+nrow(clin_sig) # 9
+
+lof <- cleaned_ihcap75_vv_rare.df[cleaned_ihcap75_vv_rare.df$IMPACT == "HIGH",]
+nrow(lof) # 80
+
+missense <- cleaned_ihcap75_vv_rare.df[cleaned_ihcap75_vv_rare.df$IMPACT == "MODERATE",]
+nrow(missense) # 1300
+
+# Explore the data as factors/vectors
+summary(as.factor(missense$SIFT_call))
+summary(as.factor(missense$PolyPhen_call))
+# Consequence
+a <- strsplit(as.vector(missense$Consequence),"&")
+b <- unique(as.vector(unlist(a)))
+b
+
+# Filter on consequence - Part2
+mis_deldam <- missense[(grepl("deleterious", missense$SIFT_call) & grepl("probably_damaging", missense$PolyPhen_call)) |
+              (is.na(missense$SIFT_call) & grepl("probably_damaging", missense$PolyPhen_call)) |
+              (grepl("deleterious", missense$SIFT_call) & is.na(missense$PolyPhen_call)) | 
+              (grepl("deleterious", missense$SIFT_call) & grepl("possibly_damaging", missense$PolyPhen_call)) |
+              (is.na(missense$SIFT_call) & grepl("possibly_damaging", missense$PolyPhen_call)) |
+              grepl("inframe", missense$Consequence) |
+              grepl("splice_region_variant", missense$Consequence) |
+              grepl("protein_altering_variant", missense$Consequence),]
+nrow(mis_deldam) # 373
+
+##### MAKE SELECTED VARIANTS WITH LOGICAL VECTORS #####
+clin_sig_var <- grepl("pathogenic", cleaned_ihcap75_vv_rare.df$CLIN_SIG) | grepl("risk_factor", cleaned_ihcap75_vv_rare.df$CLIN_SIG)
+summary(clin_sig_var) # 9
+
+lof_var <- grepl("HIGH", cleaned_ihcap75_vv_rare.df$IMPACT)
+summary(lof_var) # 80
+
+mis_deldam_vars <- (grepl("deleterious", cleaned_ihcap75_vv_rare.df$SIFT_call) & grepl("probably_damaging", cleaned_ihcap75_vv_rare.df$PolyPhen_call)) |
+              (is.na(cleaned_ihcap75_vv_rare.df$SIFT_call) & grepl("probably_damaging", cleaned_ihcap75_vv_rare.df$PolyPhen_call)) |
+              (grepl("deleterious", cleaned_ihcap75_vv_rare.df$SIFT_call) & is.na(cleaned_ihcap75_vv_rare.df$PolyPhen_call)) | 
+              (grepl("deleterious", cleaned_ihcap75_vv_rare.df$SIFT_call) & grepl("possibly_damaging", cleaned_ihcap75_vv_rare.df$PolyPhen_call)) |
+              (is.na(cleaned_ihcap75_vv_rare.df$SIFT_call) & grepl("possibly_damaging", cleaned_ihcap75_vv_rare.df$PolyPhen_call)) |
+              grepl("inframe", cleaned_ihcap75_vv_rare.df$Consequence) |
+              grepl("splice_region_variant", cleaned_ihcap75_vv_rare.df$Consequence) |
+              grepl("protein_altering_variant", cleaned_ihcap75_vv_rare.df$Consequence)
+summary(mis_deldam_vars) # 597
+
+low_vars <- grepl("LOW", cleaned_ihcap75_vv_rare.df$IMPACT)
+summary(low_vars) # 1284
+
+mod_vars <- grepl("MODIFIER", cleaned_ihcap75_vv_rare.df$IMPACT)
+summary(mod_vars) # 1584
+
+selected_ihcap75_rare_lofmis_vv.df <- cleaned_ihcap75_vv_rare.df[clin_sig_var | lof_var | mis_deldam_vars & !low_vars & !mod_vars,]
+dim (selected_ihcap75_rare_lofmis_vv.df) # 459 x 52
+#####
+
+# Make the selected LOF-MIS-CLINSIG vv.df and deduplicate
+#selected_vv.df <- rbind(lof, mis_deldam, clin_sig)
+#vars <- as.vector(selected_vv.df$SplitVarID) # Old: vars <- selected_vv.df2$SplitVarID
+#length(vars) # 462
+#a <- duplicated(vars)
+#summary(a) # 3
+
+#vars2 <- unique(as.vector(selected_vv.df$SplitVarID)) # Old: vars2 <- unique(selected_vv.df2$SplitVarID)
+#length(vars2) # 459
+
+#cleaned_ihcap75_vv_rare_lof_misdeldam.df <- cleaned_ihcap75_vv_rare.df[vars2,]
+#dim(cleaned_ihcap75_vv_rare_lof_misdeldam.df) # 459 x 52
+
+# Sort the vv df by rownames
+#cleaned_ihcap75_vv_rare_lof_misdeldam.df <- cleaned_ihcap75_vv_rare_lof_misdeldam.df[order(row.names(cleaned_ihcap75_vv_rare_lof_misdeldam.df)),]
+
+#Number of variants after filtering on consequence
+nrow(selected_ihcap75_rare_lofmis_vv.df) # 459
+#nrow(cleaned_ihcap75_vv_rare_lof_misdeldam.df) # 459
+#sum(rownames(selected_ihcap75_lofmis_vv.df) != rownames(cleaned_ihcap75_vv_rare_lof_misdeldam.df))
+
+#Check and remove variants from gt file - LOFMIS
+dim(cleaned_ihcap75_gt_rare.mx) # 4248 x 5
+dim(selected_ihcap75_rare_lofmis_vv.df) # 459 x 52
+cleaned_ihcap75_vv_rare_lof_misdeldam.df <- selected_ihcap75_rare_lofmis_vv.df
+dim(cleaned_ihcap75_vv_rare_lof_misdeldam.df) # 459 x 52
+
+cleaned_ihcap75_gt_rare_lof_misdeldam.mx <- cleaned_ihcap75_gt_rare.mx[row.names(cleaned_ihcap75_vv_rare_lof_misdeldam.df),]
+dim(cleaned_ihcap75_gt_rare_lof_misdeldam.mx) # 459 x 5
+
+nrow(cleaned_ihcap75_vv_rare_lof_misdeldam.df) # 459
+nrow(cleaned_ihcap75_gt_rare_lof_misdeldam.mx) # 459
+
+#Clean up
+rm(lof, missense, mis_deldam, clin_sig, a, b, clin_sig_var, lof_var, mis_deldam_vars, low_vars, mod_vars,
+   selected_ihcap75_rare_lofmis_vv.df)
+#rm(vars, vars2, selected_vv.df)
+
+```
+
+# filter_vv_on_consequence_rarest
+
+```{r filter_vv_on_consequence_rarest}
+
+sum(rownames(cleaned_ihcap75_gt_rarest.mx) != rownames(cleaned_ihcap75_vv_rarest.df))
+nrow(cleaned_ihcap75_vv_rarest.df) #  2731
+
+# CLIN_SIG
+a <- strsplit(as.vector(cleaned_ihcap75_vv_rarest.df$CLIN_SIG),"&")
+b <- unique(as.vector(unlist(a)))
+b
+
+# Filter on consequence - Part1
+clin_sig <- cleaned_ihcap75_vv_rarest.df[grepl("pathogenic", cleaned_ihcap75_vv_rarest.df$CLIN_SIG),]
+nrow(clin_sig) # 5
+
+lof <- cleaned_ihcap75_vv_rarest.df[cleaned_ihcap75_vv_rarest.df$IMPACT == "HIGH",]
+nrow(lof) # 70
+
+missense <- cleaned_ihcap75_vv_rarest.df[cleaned_ihcap75_vv_rarest.df$IMPACT == "MODERATE",]
+nrow(missense) # 859
+
+# Explore the data as factors/vectors
+summary(as.factor(missense$SIFT_call))
+summary(as.factor(missense$PolyPhen_call))
+# Consequence
+a <- strsplit(as.vector(missense$Consequence),"&")
+b <- unique(as.vector(unlist(a)))
+b
+
+# Filter on consequence - Part2
+mis_deldam <- missense[(grepl("deleterious", missense$SIFT_call) & grepl("probably_damaging", missense$PolyPhen_call)) |
+              (is.na(missense$SIFT_call) & grepl("probably_damaging", missense$PolyPhen_call)) |
+              (grepl("deleterious", missense$SIFT_call) & is.na(missense$PolyPhen_call)) | 
+              (grepl("deleterious", missense$SIFT_call) & grepl("possibly_damaging", missense$PolyPhen_call)) |
+              (is.na(missense$SIFT_call) & grepl("possibly_damaging", missense$PolyPhen_call)) |
+              grepl("inframe", missense$Consequence) |
+              grepl("splice_region_variant", missense$Consequence) |
+              grepl("protein_altering_variant", missense$Consequence),]
+nrow(mis_deldam) # 291
+
+##### MAKE SELECTED VARIANTS WITH LOGICAL VECTORS #####
+clin_sig_var <- grepl("pathogenic", cleaned_ihcap75_vv_rarest.df$CLIN_SIG)
+summary(clin_sig_var) # 5
+
+lof_var <- grepl("HIGH", cleaned_ihcap75_vv_rarest.df$IMPACT)
+summary(lof_var) # 70
+
+mis_deldam_vars <- (grepl("deleterious", cleaned_ihcap75_vv_rarest.df$SIFT_call) & grepl("probably_damaging", cleaned_ihcap75_vv_rarest.df$PolyPhen_call)) |
+              (is.na(cleaned_ihcap75_vv_rarest.df$SIFT_call) & grepl("probably_damaging", cleaned_ihcap75_vv_rarest.df$PolyPhen_call)) |
+              (grepl("deleterious", cleaned_ihcap75_vv_rarest.df$SIFT_call) & is.na(cleaned_ihcap75_vv_rarest.df$PolyPhen_call)) | 
+              (grepl("deleterious", cleaned_ihcap75_vv_rarest.df$SIFT_call) & grepl("possibly_damaging", cleaned_ihcap75_vv_rarest.df$PolyPhen_call)) |
+              (is.na(cleaned_ihcap75_vv_rarest.df$SIFT_call) & grepl("possibly_damaging", cleaned_ihcap75_vv_rarest.df$PolyPhen_call)) |
+              grepl("inframe", cleaned_ihcap75_vv_rarest.df$Consequence) |
+              grepl("splice_region_variant", cleaned_ihcap75_vv_rarest.df$Consequence) |
+              grepl("protein_altering_variant", cleaned_ihcap75_vv_rarest.df$Consequence)
+summary(mis_deldam_vars) # 436
+
+low_vars <- grepl("LOW", cleaned_ihcap75_vv_rarest.df$IMPACT)
+summary(low_vars) # 742
+
+mod_vars <- grepl("MODIFIER", cleaned_ihcap75_vv_rarest.df$IMPACT)
+summary(mod_vars) # 1060
+
+selected_ihcap75_rarest_lofmis_vv.df <- cleaned_ihcap75_vv_rarest.df[clin_sig_var | lof_var | mis_deldam_vars & !low_vars & !mod_vars,]
+dim (selected_ihcap75_rarest_lofmis_vv.df) # 363 x 52
+#####
+
+# Make the selected LOF-MIS-CLINSIG vv.df and deduplicate
+#selected_vv.df <- rbind(lof, mis_deldam, clin_sig)
+#vars <- as.vector(selected_vv.df$SplitVarID) # Old: vars <- selected_vv.df2$SplitVarID
+#length(vars) # 366
+#a <- duplicated(vars)
+#summary(a) # 3
+
+#vars2 <- unique(as.vector(selected_vv.df$SplitVarID)) # Old: vars2 <- unique(selected_vv.df2$SplitVarID)
+#length(vars2) # 363
+
+#cleaned_ihcap75_vv_rarest_lof_misdeldam.df <- cleaned_ihcap75_vv_rarest.df[vars2,]
+#dim(cleaned_ihcap75_vv_rarest_lof_misdeldam.df) # 363 x 52
+
+# Sort the vv df by rownames
+#cleaned_ihcap75_vv_rarest_lof_misdeldam.df <- cleaned_ihcap75_vv_rarest_lof_misdeldam.df[order(row.names(cleaned_ihcap75_vv_rarest_lof_misdeldam.df)),]
+
+#Number of variants after filtering on consequence
+nrow(selected_ihcap75_rarest_lofmis_vv.df) # 363
+#nrow(cleaned_ihcap75_vv_rarest_lof_misdeldam.df) # 363
+#sum(rownames(selected_ihcap75_rarest_lofmis_vv.df) != rownames(cleaned_ihcap75_vv_rarest_lof_misdeldam.df))
+
+#Check and remove variants from gt file - LOFMIS
+dim(cleaned_ihcap75_gt_rarest.mx) # 2731 x 5
+dim(selected_ihcap75_rarest_lofmis_vv.df) # 363 x 52
+cleaned_ihcap75_vv_rarest_lof_misdeldam.df <- selected_ihcap75_rarest_lofmis_vv.df
+dim(cleaned_ihcap75_vv_rarest_lof_misdeldam.df) # 363 x 52
+
+cleaned_ihcap75_gt_rarest_lof_misdeldam.mx <- cleaned_ihcap75_gt_rarest.mx[row.names(cleaned_ihcap75_vv_rarest_lof_misdeldam.df),]
+dim(cleaned_ihcap75_gt_rarest_lof_misdeldam.mx) # 363 x 5
+
+nrow(cleaned_ihcap75_vv_rarest_lof_misdeldam.df) # 363
+nrow(cleaned_ihcap75_gt_rarest_lof_misdeldam.mx) # 363
+
+#Clean up
+rm(lof, missense, mis_deldam, clin_sig, a, b, clin_sig_var, lof_var, mis_deldam_vars, low_vars, mod_vars,
+   selected_ihcap75_rarest_lofmis_vv.df)
+#rm(vars, vars2, selected_vv.df)
+
+```
+
+# explore_LOFMIS_ihcap75G_vars
+
+```{r explore_LOFMIS_ihcap75G_vars}
+
+# SELECT LOFMIS VARS ONLY IN GERMLINE SAMPLE
+
+# Rare variants
+sum(rownames(cleaned_ihcap75_vv_rare_lof_misdeldam.df) != rownames(cleaned_ihcap75_gt_rare_lof_misdeldam.mx))
+rare_merge_lofmis_new.df <- cbind(cleaned_ihcap75_vv_rare_lof_misdeldam.df, cleaned_ihcap75_gt_rare_lof_misdeldam.mx)
+class(rare_merge_lofmis_new.df)
+dim(rare_merge_lofmis_new.df) # 459 x 57
+ihcap75G_merge_rare_lofmis.df <- filter(rare_merge_lofmis_new.df, IHCAP_75_1A >=1 & !is.na(rare_merge_lofmis_new.df$IHCAP_75_1A))
+dim(ihcap75G_merge_rare_lofmis.df) # 402 x 57
+
+table(ihcap75G_merge_rare_lofmis.df$CHROM)
+#ihcap75G_merge_rare_lofmis.df <- filter(ihcap75G_merge_rare_lofmis.df, CHROM != "MT")
+#dim(ihcap75G_merge_rare_lofmis.df)
+
+# Rarest variants
+sum(rownames(cleaned_ihcap75_vv_rarest_lof_misdeldam.df) != rownames(cleaned_ihcap75_gt_rarest_lof_misdeldam.mx))
+rarest_merge_lofmis_new.df <- cbind(cleaned_ihcap75_vv_rarest_lof_misdeldam.df, cleaned_ihcap75_gt_rarest_lof_misdeldam.mx)
+class(rarest_merge_lofmis_new.df)
+dim(rarest_merge_lofmis_new.df) # 363 x 57
+ihcap75G_merge_rarest_lofmis.df <- filter(rarest_merge_lofmis_new.df, IHCAP_75_1A >=1 & !is.na(rarest_merge_lofmis_new.df$IHCAP_75_1A))
+dim(ihcap75G_merge_rarest_lofmis.df) # 306 x 57
+
+table(ihcap75G_merge_rarest_lofmis.df$CHROM)
+#ihcap75G_merge_rarest_lofmis.df <- filter(ihcap75G_merge_rarest_lofmis.df, CHROM != "MT")
+#dim(ihcap75G_merge_rarest_lofmis.df)
+
+# EXPLORE INDELs
+rare_indels.df <- ihcap75G_merge_rare_lofmis.df[ihcap75G_merge_rare_lofmis.df$TYPE == "INDEL",]
+dim(rare_indels.df) # 113 x 57
+summary(rare_indels.df$Consequence)
+
+rarest_indels.df <- ihcap75G_merge_rarest_lofmis.df[ihcap75G_merge_rarest_lofmis.df$TYPE == "INDEL",]
+dim(rarest_indels.df) # 103 x 57
+summary(rarest_indels.df$Consequence)
+
+# EXPLORE SNVs
+rare_snv.df <- ihcap75G_merge_rare_lofmis.df[ihcap75G_merge_rare_lofmis.df$TYPE == "SNP",]
+dim(rare_snv.df) # 289 x 57
+summary(rare_snv.df$Consequence)
+
+rarest_snv.df <- ihcap75G_merge_rarest_lofmis.df[ihcap75G_merge_rarest_lofmis.df$TYPE == "SNP",]
+dim(rarest_snv.df) # 203 x 57
+summary(rarest_snv.df$Consequence)
+
+# clean-up
+rm (rare_merge_lofmis_new.df, rarest_merge_lofmis_new.df,
+    rare_indels.df, rarest_indels.df, rare_snv.df, rarest_snv.df)
+
+```
+
+# merge_vv_into_gt.mx_and_export_for_LOFMIS
+
+```{r merge_vv_into_gt.mx_and_export_for_LOFMIS}
+
+# Merge and export RARE vv & gt files - all uncommon & lof/mis variants
+sum(rownames(cleaned_ihcap75_vv_rare_lof_misdeldam.df) != rownames(cleaned_ihcap75_gt_rare_lof_misdeldam.mx))
+ihcap75_rare_lof_misdeldam_merged.mx <- as.matrix(merge(cleaned_ihcap75_vv_rare_lof_misdeldam.df, cleaned_ihcap75_gt_rare_lof_misdeldam.mx, by="row.names"))
+dim(ihcap75_rare_lof_misdeldam_merged.mx) # 459 x 58
+write.table(ihcap75_rare_lof_misdeldam_merged.mx, "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/results/ihcap75_rare_gtvv_lofmisdam.txt", quote = FALSE, sep = "\t", row.names=FALSE, col.names=TRUE)
+
+# Merge and export RAREST vv & gt files - all uncommon & lof/mis variants
+sum(rownames(cleaned_ihcap75_vv_rarest_lof_misdeldam.df) != rownames(cleaned_ihcap75_gt_rarest_lof_misdeldam.mx))
+ihcap75_rarest_lof_misdeldam_merged.mx <- as.matrix(merge(cleaned_ihcap75_vv_rarest_lof_misdeldam.df, cleaned_ihcap75_gt_rarest_lof_misdeldam.mx, by="row.names"))
+dim(ihcap75_rarest_lof_misdeldam_merged.mx) # 363 x 58
+write.table(ihcap75_rarest_lof_misdeldam_merged.mx, "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/results/ihcap75_rarest_gtvv_lofmisdam.txt", quote = FALSE, sep = "\t", row.names=FALSE, col.names=TRUE)
+
+# Clean up
+rm(ihcap75_rare_lof_misdeldam_merged.mx, ihcap75_rarest_lof_misdeldam_merged.mx)
+
+```
+
+# data_summary  
+
+```{r data_summary}
+ls()
+
+dim(cleaned_gt_rare.mx)
+class(cleaned_gt_rare.mx)
+cleaned_gt_rare.mx[1:5,1:5]
+
+dim(cleaned_vv_rare.df)
+class(cleaned_vv_rare.df)
+cleaned_vv_rare.df[1:5,1:5]
+
+dim(cleaned_gt_rarest.mx)
+class(cleaned_gt_rarest.mx)
+cleaned_gt_rarest.mx[1:5,1:5]
+
+dim(cleaned_vv_rarest.df)
+class(cleaned_vv_rarest.df)
+cleaned_vv_rarest.df[1:5,1:5]
+
+dim(cleaned_ihcap75_gt_rare.mx)
+class(cleaned_ihcap75_gt_rare.mx)
+cleaned_ihcap75_gt_rare.mx[1:5,1:3]
+
+dim(cleaned_ihcap75_vv_rare.df)
+class(cleaned_ihcap75_vv_rare.df)
+cleaned_ihcap75_vv_rare.df[1:5,1:5]
+
+dim(cleaned_ihcap75_gt_rare_lof_misdeldam.mx)
+class(cleaned_ihcap75_gt_rare_lof_misdeldam.mx)
+cleaned_ihcap75_gt_rare_lof_misdeldam.mx[1:5,1:3]
+
+dim(cleaned_ihcap75_vv_rare_lof_misdeldam.df)
+class(cleaned_ihcap75_vv_rare_lof_misdeldam.df)
+cleaned_ihcap75_vv_rare_lof_misdeldam.df[1:5,1:5]
+
+dim(cleaned_ihcap75_gt_rarest.mx)
+class(cleaned_ihcap75_gt_rarest.mx)
+cleaned_ihcap75_gt_rarest.mx[1:5,1:3]
+
+dim(cleaned_ihcap75_vv_rarest.df)
+class(cleaned_ihcap75_vv_rarest.df)
+cleaned_ihcap75_vv_rarest.df[1:5,1:5]
+
+dim(cleaned_ihcap75_gt_rarest_lof_misdeldam.mx)
+class(cleaned_ihcap75_gt_rarest_lof_misdeldam.mx)
+cleaned_ihcap75_gt_rarest_lof_misdeldam.mx[1:5,1:3]
+
+dim(cleaned_ihcap75_vv_rarest_lof_misdeldam.df)
+class(cleaned_ihcap75_vv_rarest_lof_misdeldam.df)
+cleaned_ihcap75_vv_rarest_lof_misdeldam.df[1:5,1:5]
+
+# Check consistency of colnames and rownames
+sum(rownames(cleaned_gt_rare.mx) != rownames(cleaned_vv_rare.df))
+sum(rownames(cleaned_gt_rarest.mx) != rownames(cleaned_vv_rarest.df))
+sum(rownames(cleaned_ihcap75_gt_rare.mx) != rownames(cleaned_ihcap75_vv_rare.df))
+sum(rownames(cleaned_ihcap75_gt_rare_lof_misdeldam.mx) != rownames(cleaned_ihcap75_vv_rare_lof_misdeldam.df))
+sum(rownames(cleaned_ihcap75_gt_rarest.mx) != rownames(cleaned_ihcap75_vv_rarest.df))
+sum(rownames(cleaned_ihcap75_gt_rarest_lof_misdeldam.mx) != rownames(cleaned_ihcap75_vv_rarest_lof_misdeldam.df))
+
+```
+
+# save_data  
+
+```{r save_data}
+
+save.image(paste(interim_data_folder, "Rsession_05_data_clean_up_IHCAP75_germ.RData", sep="/"))
+
+```
+
+# final_section  
+
+```{r final_section}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

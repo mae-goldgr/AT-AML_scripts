@@ -1,0 +1,293 @@
+---
+title: "Rsession_03_add_kgen_exac_filter_common_germ"
+author: "Mae Goldgraben"
+date: "28May2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+last updated: Mae Goldgraben, 28May2018  
+
+# Summary
+
+The script performs the following:  
+
+- check the data   
+
+- remove variants uniform across all samples (especially after GQ, DP, CR filtering)  
+
+- incorporate exac and kgen for selected variants where available (biallelic have been selected in exac/kgen)  
+
+- filter out common variants 5% and 1% AFs from EUR kgen  
+
+- save data  
+
+# start_section
+
+```{r start_section}
+
+# Time stamp
+Sys.time()
+
+# Clean up
+rm(list=ls())
+
+# Load libraries
+library(knitr)
+library(dplyr)
+library(ggplot2)
+
+# Folders
+setwd("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters")
+source_data_folder <- "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/source_data"
+interim_data_folder <- "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/interim_data"
+
+```
+
+# load_data
+
+```{r load_data}
+
+load(paste(interim_data_folder, "Rsession_02_filter_genotypes_and_variants_germ.RData", sep="/"))
+
+```
+
+# check_data
+
+```{r check_data}
+ls()
+
+dim(cleaned_gt.mx)
+class(cleaned_gt.mx)
+cleaned_gt.mx[1:5,1:5]
+
+dim(cleaned_vv.df)
+class(cleaned_vv.df)
+cleaned_vv.df[1:5,1:5]
+
+dim(cleaned_kgen.df)
+class(cleaned_kgen.df)
+cleaned_kgen.df[1:5,1:5]
+
+dim(cleaned_exac.df)
+class(cleaned_exac.df)
+cleaned_exac.df[1:5,1:5]
+
+# Check consistency of rownames
+sum(rownames(cleaned_gt.mx) != rownames(cleaned_vv.df))
+sum(rownames(cleaned_gt.mx) != rownames(cleaned_kgen.df))
+sum(rownames(cleaned_gt.mx) != rownames(cleaned_exac.df))
+
+```
+
+# remove_variants_with_the_uniform_genotypes_across_all_samples
+
+Remove 8,464 (624 all ref; 2,546 all het; 5,294 all homo) variants of 55,579 -> 47,115
+
+```{r remove_variants_with_the_uniform_genotypes_across_all_samples}
+
+# Check that there are none all-NA variants
+non_NA_count.udf <- function(x){sum(!is.na(x))}
+all_NA <- apply(cleaned_gt.mx, 1, non_NA_count.udf) == 0
+sum(all_NA) # 0
+
+# Function to detect uniform numeric vector
+uniform_vector.udf <- function(x){
+  if(min(x, na.rm=TRUE) == max(x, na.rm=TRUE)){return(TRUE)} else {return(FALSE)}}
+
+# Variants with uniform genotypes across all samples 
+uniform_genotypes <- apply(cleaned_gt.mx, 1, uniform_vector.udf)
+summary(uniform_genotypes) # 8,464
+uni.gen.df <- as.data.frame(uniform_genotypes)
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+uniform_vector.0.udf <- function(x){
+  if(min(x, na.rm=TRUE) == 0 & max(x, na.rm=TRUE) == 0){return(TRUE)} else {return(FALSE)}}
+uniform_genotypes0 <- apply(cleaned_gt.mx, 1, uniform_vector.0.udf)
+summary(uniform_genotypes0) # 624
+uni.gen.0.df <- as.data.frame(uniform_genotypes0)
+
+uniform_vector.1.udf <- function(x){
+  if(min(x, na.rm=TRUE) == 1 & max(x, na.rm=TRUE) == 1){return(TRUE)} else {return(FALSE)}}
+uniform_genotypes1 <- apply(cleaned_gt.mx, 1, uniform_vector.1.udf)
+summary(uniform_genotypes1) # 2,546
+uni.gen.1.df <- as.data.frame(uniform_genotypes1)
+
+uniform_vector.2.udf <- function(x){
+  if(min(x, na.rm=TRUE) == 2 & max(x, na.rm=TRUE) == 2){return(TRUE)} else {return(FALSE)}}
+uniform_genotypes2 <- apply(cleaned_gt.mx, 1, uniform_vector.2.udf)
+summary(uniform_genotypes2) # 5,294
+uni.gen.2.df <- as.data.frame(uniform_genotypes2)
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+# Remove variants with uniform genotypes across all samples
+cleaned_gt.mx <- cleaned_gt.mx[!uniform_genotypes,]
+cleaned_vv.df <- cleaned_vv.df[!uniform_genotypes,]
+cleaned_kgen.df <- cleaned_kgen.df[!uniform_genotypes,]
+cleaned_exac.df <- cleaned_exac.df[!uniform_genotypes,]
+
+dim(cleaned_gt.mx) # 47,115 x 8
+dim(cleaned_vv.df)
+dim(cleaned_kgen.df)
+dim(cleaned_exac.df)
+
+# Clean-up
+rm(non_NA_count.udf, all_NA, uniform_vector.udf, uniform_genotypes, uni.gen.df, uniform_vector.0.udf, uniform_genotypes0, uni.gen.0.df, uniform_vector.1.udf, uniform_genotypes1, uni.gen.1.df, uniform_vector.2.udf, uniform_genotypes2, uni.gen.2.df)
+
+```
+
+# add_exac_and_kgen_frequencies_to_vv_file
+
+```{r add_exac_kgen_AFs_to_vv_file}
+
+# Since ALL samples in analysis were mainly EUR decent
+# Add kgen overall and EURopean AFs
+sum(rownames(cleaned_vv.df)!= rownames(cleaned_kgen.df))
+cleaned_vv.df$kgen.AF <- cleaned_kgen.df$kgen.AF
+cleaned_vv.df$kgen.EUR_AF <- cleaned_kgen.df$kgen.EUR_AF
+
+# Add exac overall and EURopean AFs
+sum(rownames(cleaned_vv.df)!= rownames(cleaned_exac.df))
+cleaned_vv.df$exac_non_TCGA.AF <- cleaned_exac.df$exac_non_TCGA.AF
+cleaned_vv.df$exac_non_TCGA_NFE.AF <- cleaned_exac.df$exac_non_TCGA.AC_NFE/cleaned_exac.df$exac_non_TCGA.AN_NFE
+
+```
+
+# filter_out_most_common_variants_EUR_kgen_in_vv_file_0.05_0.95
+
+Keep vars with AFs in EUR kgen MAF<0.05, MAF>0.95, or NA -> 10,284 vars
+
+```{r filter_out_most_common_variants_EUR_kgen_in_vv_file_0.05_0.95}
+
+# pull variants kgen AF < 0.05, > 0.95, or NA
+cleaned_vv_rare1.df <- cleaned_vv.df %>% filter(kgen.EUR_AF < 0.05 | kgen.EUR_AF > 0.95 | is.na(kgen.EUR_AF))
+dim (cleaned_vv_rare1.df) # 10,284 x 72
+
+rare_vars <- as.vector(cleaned_vv_rare1.df$SplitVarID)
+cleaned_gt_rare1.df <- cleaned_gt.mx[rare_vars, ]
+dim (cleaned_gt_rare1.df) # 10,284 x 8
+
+# cross-check - create vector of common variants in ALL_kgen
+kgen_common <- row.names(cleaned_kgen.df[cleaned_kgen.df$kgen.EUR_AF >= 0.05 & cleaned_kgen.df$kgen.EUR_AF <= 0.95 & !is.na(cleaned_kgen.df$kgen.EUR_AF),])
+# Number of variants to remove
+dim(cleaned_vv.df) # 47,115 x 72
+length(kgen_common) # 36,831
+
+# Remove common variants from vv file 
+cleaned_vv_rare.df <- cleaned_vv.df[!row.names(cleaned_vv.df) %in% kgen_common,]
+# Number of variants remaining after rare filters
+nrow(cleaned_vv_rare.df) # 10,284
+# Sort vv_rare file on rownames
+cleaned_vv_rare.df <- cleaned_vv_rare.df[order(row.names(cleaned_vv_rare.df)),]
+
+# Check and remove common variants from gt file 
+dim(cleaned_gt.mx) # 47,115 x 8
+cleaned_gt_rare.mx <- cleaned_gt.mx[!row.names(cleaned_gt.mx) %in% kgen_common,]
+# Number of variants remaining after rare filters
+nrow(cleaned_gt_rare.mx) # 10,284
+# Sort vv_rare file on rownames
+cleaned_gt_rare.mx <- cleaned_gt_rare.mx[order(row.names(cleaned_gt_rare.mx)),]
+
+sum(rownames(cleaned_gt_rare.mx) != rownames(cleaned_gt_rare1.df)) # effectively the same!
+
+# Clean up
+rm(rare_vars, kgen_common, cleaned_vv_rare1.df, cleaned_gt_rare1.df)
+
+```
+
+# filter_out_all_common_variants_EUR_kgen_in_vv_file_0.01_0.99
+
+Keep vars with AFs in EUR kgen MAF<0.01, MAF>0.99, or NA -> 5,993 vars
+
+```{r filter_out_most_common_variants_EUR_kgen_in_vv_file_0.01_0.99}
+
+# pull variants kgen AF < 0.01, > 0.99, or NA
+cleaned_vv_rarest1.df <- cleaned_vv.df %>% filter(kgen.EUR_AF < 0.01 | kgen.EUR_AF > 0.99 | is.na(kgen.EUR_AF))
+dim (cleaned_vv_rarest1.df) # 5,993 x 72
+
+rarest_vars <- as.vector(cleaned_vv_rarest1.df$SplitVarID)
+cleaned_gt_rarest1.df <- cleaned_gt.mx[rarest_vars, ]
+dim (cleaned_gt_rarest1.df) # 5,993 x 8
+
+# cross-check - create vector of common variants in EUR_kgen
+kgen_commonest <- row.names(cleaned_kgen.df[cleaned_kgen.df$kgen.EUR_AF >= 0.01 & cleaned_kgen.df$kgen.EUR_AF <= 0.99 & !is.na(cleaned_kgen.df$kgen.EUR_AF),])
+# Number of variants to remove
+dim(cleaned_vv.df) # 47,115 x 72
+length(kgen_commonest) # 41,122
+
+# Remove common variants from vv file 
+cleaned_vv_rarest.df <- cleaned_vv.df[!row.names(cleaned_vv.df) %in% kgen_commonest,]
+# Number of variants remaining after rare filters
+nrow(cleaned_vv_rarest.df) # 5,993
+# Sort vv_rare file on rownames
+cleaned_vv_rarest.df <- cleaned_vv_rarest.df[order(row.names(cleaned_vv_rarest.df)),]
+
+# Check and remove common variants from gt file 
+dim(cleaned_gt.mx) # 47,115
+cleaned_gt_rarest.mx <- cleaned_gt.mx[!row.names(cleaned_gt.mx) %in% kgen_commonest,]
+# Number of variants remaining after rare filters
+nrow(cleaned_gt_rarest.mx) # 5,993
+# Sort vv_rare file on rownames
+cleaned_gt_rarest.mx <- cleaned_gt_rarest.mx[order(row.names(cleaned_gt_rarest.mx)),]
+
+sum(rownames(cleaned_gt_rarest.mx) != rownames(cleaned_gt_rarest1.df)) # effectively the same!
+
+# Clean up
+rm(rarest_vars, kgen_commonest, cleaned_vv_rarest1.df, cleaned_gt_rarest1.df)
+
+```
+
+# clean-up
+
+```{r}
+
+rm(cleaned_kgen.df, cleaned_exac.df, cleaned_gt.mx, cleaned_vv.df)
+
+```
+
+# data_summary
+
+```{r data_summary}
+
+ls()
+
+dim(cleaned_gt_rare.mx)
+class(cleaned_gt_rare.mx)
+cleaned_gt_rare.mx[1:5,1:5]
+
+dim(cleaned_vv_rare.df)
+class(cleaned_vv_rare.df)
+cleaned_vv_rare.df[1:5,1:5]
+
+dim(cleaned_gt_rarest.mx)
+class(cleaned_gt_rarest.mx)
+cleaned_gt_rarest.mx[1:5,1:5]
+
+dim(cleaned_vv_rarest.df)
+class(cleaned_vv_rarest.df)
+cleaned_vv_rarest.df[1:5,1:5]
+
+# Check consistency of colnames and rownames
+sum(rownames(cleaned_gt_rare.mx) != rownames(cleaned_vv_rare.df))
+sum(rownames(cleaned_gt_rarest.mx) != rownames(cleaned_vv_rarest.df))
+
+```
+
+# save_data
+
+```{r save_data}
+
+save.image(paste(interim_data_folder, "Rsession_03_add_kgen_exac_filter_common_germ.RData", sep="/"))
+
+```
+
+# final_section
+
+```{r final_section}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

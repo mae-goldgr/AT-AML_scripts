@@ -1,0 +1,475 @@
+---
+title: "explore source data for somatic aml"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+started: AL16May2018  
+last updated: AL20May2018  
+checked through: MG25May2018 on vep91 annotated data  
+
+### set text width and scrolling for html output
+
+modified from here:  
+https://stackoverflow.com/questions/36845178/width-of-r-code-chunk-output-in-rmarkdown-files-knitr-ed-to-html 
+
+<style>
+pre {
+  overflow-x: auto;
+}
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r set_width, echo=F}
+
+options(width = 999)
+
+```
+
+# Summary
+
+Explore total & allelic read depth in all cases, and in ref/alt and normal/tumours separately  
+Explore alt fraction in all and in normals/tumours separately  
+
+The following filters were suggested after exploring the data:  
+- Exclude variants with total depth in normals or in tumours < 20 (less than **1%** of variants)  
+- Exclude variants where alt depth in normals > 1 (less than **1%** of variants)  
+- Exclude variants with alt depth in tumours < 3 (about **9%** of variants)  
+- Exclude variants with alt fraction in tumours < 10% (about **90%** of variants)  
+
+The percentage does not add to 100% because of filters are not applied and there is redundancy:  
+some of the removed variants would be excluded by several filters at once  
+
+I decided not to explore ref-alt difference, because it is difficult to interpret  
+An easier to interpret difference would be alt-in-tumour minus alt-in-normal  
+However, this additinal filter is not necessary after 90% of variants excluded by the conventional alt fraction  
+
+Finally, this script selects a sub-group of somatic variants that were detected in more than one sample  
+and makes separate tables for this sub-group  
+
+# start_section
+
+```{r start_section}
+
+Sys.time()
+rm(list=ls())
+graphics.off()
+
+library(knitr)
+base_folder="/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/filtering_somatic_with_AL_vep91/"
+setwd(base_folder)
+opts_knit$set(root.dir = base_folder)
+
+#library(dplyr)
+#opts_knit$set(width = 999)
+
+```
+
+# read_data
+
+```{r read_data}
+
+gt_add.df <- read.table("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/ihcap_75_somatic_v2_std_sma_ann_vep91_txt/ihcap_75_somatic_v2_std_sma_ann_v91_GT_add.txt", sep="\t", header=T)
+ad.df <- read.table("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/ihcap_75_somatic_v2_std_sma_ann_vep91_txt/ihcap_75_somatic_v2_std_sma_ann_v91_AD.txt", sep="\t", header=T)
+vv.df <- read.table("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/ihcap_75_somatic_v2_std_sma_ann_vep91_txt/ihcap_75_somatic_v2_std_sma_ann_v91_VV.txt", sep="\t", header=T)
+
+#gt_chr.df <- read.table("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/ihcap_75_somatic_v2_std_sma_ann_vep91_txt/ihcap_75_somatic_v2_std_sma_ann_v91_GT.txt", sep="\t", header=T)
+#lod.df <- read.table("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/ihcap_75_somatic_v2_std_sma_ann_vep91_txt/ihcap_75_somatic_v2_std_sma_ann_v91_LOD.txt", sep="\t", header=T)
+#kgen.df <- read.table("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/ihcap_75_somatic_v2_std_sma_ann_vep91_txt/ihcap_75_somatic_v2_std_sma_ann_v91_kgen.txt", sep="\t", header=T)
+#exac.df <- read.table("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/ihcap_75_somatic_v2_std_sma_ann_vep91_txt/ihcap_75_somatic_v2_std_sma_ann_v91_exac.txt", sep="\t", header=T)
+
+```
+
+# check_data
+
+```{r check_data}
+
+dim(gt_add.df)
+str(gt_add.df)
+colnames(gt_add.df) <- sub("\\.GT","",colnames(gt_add.df))
+gt_add.df[1:5,1:5]
+
+dim(ad.df)
+str(ad.df)
+colnames(ad.df) <- sub("\\.AD","",colnames(ad.df))
+rownames(ad.df) <- ad.df[,1]
+ad.df[1:5,1:5]
+
+dim(vv.df)
+str(vv.df)
+rownames(vv.df) <- vv.df[,1]
+vv.df[1:5,1:6]
+
+#dim(gt_chr.df)
+#str(gt_chr.df)
+#gt_chr.df[1:5,1:5]
+
+#dim(lod.df)
+#str(lod.df)
+#lod.df[1:5,]
+
+#dim(kgen.df)
+#str(kgen.df)
+#kgen.df[1:5,1:5]
+
+#dim(exac.df)
+#str(exac.df)
+#exac.df[1:5,1:5]
+
+# check that data are in sync
+sum(rownames(gt_add.df) != rownames(ad.df))
+sum(rownames(gt_add.df) != rownames(vv.df))
+sum(colnames(gt_add.df) != colnames(ad.df[,-1]))
+
+```
+
+# split ad table
+
+```{r split_ad}
+
+# Convert ad.df to character matrix with var ids in row names
+ad.df[1:5,1:5]
+ad_chr.mx <- as.matrix(ad.df)
+rownames(ad_chr.mx) <- ad.df$SplitVarID
+ad_chr.mx <- ad_chr.mx[,-1]
+ad_chr.mx[1:5,1:5]
+
+# Split to two character matrices
+ref_chr.mx <- sub(",.*","",ad_chr.mx)
+alt_chr.mx <- sub(".*,","",ad_chr.mx)
+ref_chr.mx[1:5,1:5]
+alt_chr.mx[1:5,1:5]
+
+# Convert character matrices to numeric
+dp_ref.mx <- matrix(as.numeric(ref_chr.mx), ncol=ncol(ref_chr.mx))
+rownames(dp_ref.mx) <- rownames(ref_chr.mx)
+colnames(dp_ref.mx) <- colnames(ref_chr.mx)
+dp_ref.mx[1:5,1:5]
+
+dp_alt.mx <- matrix(as.numeric(alt_chr.mx), ncol=ncol(alt_chr.mx))
+rownames(dp_alt.mx) <- rownames(alt_chr.mx)
+colnames(dp_alt.mx) <- colnames(alt_chr.mx)
+dp_alt.mx[1:5,1:5]
+
+# make total depth matrix
+dp.mx <- dp_ref.mx + dp_alt.mx
+dp.mx[1:5,1:5]
+
+# make alt fraction matrix
+alt_fraction.mx <- dp_alt.mx / dp.mx
+
+# clean-up
+rm(ad_chr.mx, ref_chr.mx, alt_chr.mx)
+
+```
+
+# explore depth    
+
+Look separately in  
+- REF, ALT and REF+ALT  
+- all, normal(s) and tumours  
+
+## All 8 columns - for orientation only  
+
+Suggestions:  
+- exclude variants with cumulative depth < 20 **using Tumour and Normal separately**  
+- do not exclude variants on a basis of too high coverage (it is not higher than 10x mean anyway)  
+
+```{r histograms_all}
+
+# cumulative depth
+mean(dp.mx, na.rm=T)
+median(dp.mx, na.rm=T)
+hist(dp.mx, labels = T, ylim=c(0,9000))
+hist(dp.mx[dp.mx<200], labels = T, ylim=c(0,1400))
+
+# explore cases with high depth 
+too_high_dp <- unique(which(dp.mx>500)%%nrow(dp.mx))
+length(too_high_dp) # 31
+ad.df[too_high_dp,] 
+# a reference suggesting explanation for the vagueness of AD counts in normal for variant Var000006400: 
+# https://software.broadinstitute.org/gatk/documentation/tooldocs/3.8-0/org_broadinstitute_gatk_tools_walkers_annotator_DepthPerAlleleBySample.php
+# decided to keep the too high read depth for Var000006400 - of interest
+vv.df[ad.df[too_high_dp,"SplitVarID"],c("SplitVarID","SYMBOL","Consequence","CLIN_SIG")]
+
+
+# depth in ref
+mean(dp_ref.mx, na.rm=T)
+median(dp_ref.mx, na.rm=T)
+hist(dp_ref.mx, labels = T, ylim=c(0,9000))
+hist(dp_ref.mx[dp_ref.mx<200], labels = T, ylim=c(0,1400))
+
+# depth in alt
+mean(dp_alt.mx, na.rm=T)
+median(dp_alt.mx, na.rm=T)
+hist(dp_alt.mx, labels = T, ylim=c(0,17000))$breaks
+hist(dp_alt.mx[dp_alt.mx<20], labels = T, ylim=c(0,9000), right=F) # left-open, right-closed (see ?hist)
+
+sum(dp_alt.mx==0, na.rm=T)
+sum(dp_alt.mx==1, na.rm=T)
+sum(dp_alt.mx==3, na.rm=T)
+sum(dp_alt.mx==4, na.rm=T)
+sum(dp_alt.mx==5, na.rm=T)
+
+rm(too_high_dp)
+
+```
+
+## depth in normal(s)  
+
+Suggestion: 
+- keep only variants with at least 20 overall reads in normals  
+- exclude variants with ALT depth in normals > 1  
+
+```{r depth_in_normals}
+
+# select columns
+normals <- c("IHCAP75_1F_N", "IHCAP75_BM_N", "IHCAP75_T1_N", "IHCAP75_T2_N")
+
+# cumulative depth
+dp_normals.mx <- dp.mx[,normals]
+dim(dp_normals.mx)
+mean(dp_normals.mx, na.rm=T)
+median(dp_normals.mx, na.rm=T)
+hist(dp_normals.mx, labels = T, ylim=c(0,4000))
+hist(dp_normals.mx[dp_normals.mx<200], labels = T, ylim=c(0,600))
+abline(v=20, col="RED")
+
+total <- sum(!is.na(dp_normals.mx))
+total
+excluded <- 44
+excluded
+excluded/total
+
+# depth in ref
+dp_ref_normals.mx <- dp_ref.mx[,normals]
+dim(dp_ref_normals.mx)
+mean(dp_ref_normals.mx, na.rm=T)
+median(dp_ref_normals.mx, na.rm=T)
+hist(dp_ref_normals.mx, labels = T, ylim=c(0,4000))
+hist(dp_ref_normals.mx[dp_ref_normals.mx<200], labels = T, ylim=c(0,600))
+
+# depth in alt
+dp_alt_normals.mx <- dp_alt.mx[,normals]
+dim(dp_alt_normals.mx)
+mean(dp_alt_normals.mx, na.rm=T)
+median(dp_alt_normals.mx, na.rm=T)
+hist(dp_alt_normals.mx, labels = T, ylim=c(0,8500))$breaks 
+hist(dp_alt_normals.mx[dp_alt_normals.mx<20], labels = T, ylim=c(0,8500), right=F) # left-open, right-closed (see ?hist)
+abline(v=2, col="RED") # 2 means 1 because right=F : left-open, right-closed
+table(dp_alt_normals.mx)
+
+total <- sum(!is.na(dp_alt_normals.mx))
+total
+excluded <- total-7039-717
+excluded
+excluded/total
+
+# --- explore cases with high ALT depth in normals --- #
+
+# dp in normals = 2
+high_alt_in_normals <- unique(which(dp_alt_normals.mx==2)%%nrow(dp_alt_normals.mx))
+ad.df[high_alt_in_normals,]
+vv.df[ad.df[high_alt_in_normals,"SplitVarID"],c("SplitVarID","SYMBOL","Consequence","CLIN_SIG")]
+
+# dp in normals = 3
+high_alt_in_normals <- unique(which(dp_alt_normals.mx==3)%%nrow(dp_alt_normals.mx))
+ad.df[high_alt_in_normals,]
+vv.df[ad.df[high_alt_in_normals,"SplitVarID"],c("SplitVarID","SYMBOL","Consequence","CLIN_SIG")]
+
+# dp in normals = 4
+high_alt_in_normals <- unique(which(dp_alt_normals.mx==4)%%nrow(dp_alt_normals.mx))
+ad.df[high_alt_in_normals,]
+vv.df[ad.df[high_alt_in_normals,"SplitVarID"],c("SplitVarID","SYMBOL","Consequence","CLIN_SIG")]
+
+# dp in normals = 5
+high_alt_in_normals <- unique(which(dp_alt_normals.mx==5)%%nrow(dp_alt_normals.mx))
+ad.df[high_alt_in_normals,]
+vv.df[ad.df[high_alt_in_normals,"SplitVarID"],c("SplitVarID","SYMBOL","Consequence","CLIN_SIG")]
+
+# dp in normals > 5
+high_alt_in_normals <- unique(which(dp_alt_normals.mx>5)%%nrow(dp_alt_normals.mx))
+length (high_alt_in_normals) # 30
+ad.df[high_alt_in_normals,]
+vv.df[ad.df[high_alt_in_normals,"SplitVarID"],c("SplitVarID","SYMBOL","Consequence","CLIN_SIG")]
+
+# Clean-up
+rm(normals, dp_normals.mx, dp_ref_normals.mx, dp_alt_normals.mx, high_alt_in_normals, total, excluded)
+
+```
+
+## depth in tumours  
+
+Suggestions: keep only variants with  
+- at least 20 overall reads in tumour  
+- at least 3 reads supporting ALT  
+
+```{r depth_in_tumours}
+
+# select columns
+tumours <- c("IHCAP75_1F_T", "IHCAP75_BM_T", "IHCAP75_T1_T", "IHCAP75_T2_T")
+
+# cumulative depth
+dp_tumours.mx <- dp.mx[,tumours]
+dim(dp_tumours.mx)
+mean(dp_tumours.mx, na.rm=T)
+median(dp_tumours.mx, na.rm=T)
+hist(dp_tumours.mx, labels = T, ylim=c(0,4000))
+hist(dp_tumours.mx[dp.mx<200], labels = T, ylim=c(0,450))
+abline(v=20, col="RED")
+
+total <- sum(!is.na(dp_tumours.mx))
+total
+excluded <- 53
+excluded
+excluded/total
+
+# depth in ref
+dp_ref_tumours.mx <- dp_ref.mx[,tumours]
+dim(dp_ref_tumours.mx)
+mean(dp_ref_tumours.mx, na.rm=T)
+median(dp_ref_tumours.mx, na.rm=T)
+hist(dp_ref_tumours.mx, labels = T, ylim=c(0,4000))
+hist(dp_ref_tumours.mx[dp.mx<200], labels = T, ylim=c(0,470))
+
+# depth in alt
+dp_alt_tumours.mx <- dp_alt.mx[,tumours]
+dim(dp_alt_tumours.mx)
+mean(dp_alt_tumours.mx, na.rm=T)
+median(dp_alt_tumours.mx, na.rm=T)
+hist(dp_alt_tumours.mx, labels = T, ylim=c(0,8500))$breaks 
+hist(dp_alt_tumours.mx[dp_alt_tumours.mx<20], labels = T, ylim=c(0,4500), right=F) # left-open, right-closed (see ?hist)
+abline(v=3, col="RED")
+table(dp_alt_tumours.mx[dp_alt_tumours.mx<20])
+
+total <- sum(!is.na(dp_alt_tumours.mx))
+total
+excluded <- 18+92+562
+excluded
+excluded/total
+
+# --- explore cases with low ALT depth in tumours --- #
+
+# alt in tumours = 0
+low_alt_in_tumours <- unique(which(dp_alt_tumours.mx==0)%%nrow(dp_alt_tumours.mx))
+ad.df[low_alt_in_tumours,]
+vv.df[ad.df[low_alt_in_tumours,"SplitVarID"],c("SplitVarID","SYMBOL","Consequence","CLIN_SIG")]
+
+# alt in tumours = 1
+low_alt_in_tumours <- unique(which(dp_alt_tumours.mx==1)%%nrow(dp_alt_tumours.mx))
+ad.df[low_alt_in_tumours,]
+vv.df[ad.df[low_alt_in_tumours,"SplitVarID"],c("SplitVarID","SYMBOL","Consequence","CLIN_SIG")]
+
+# Clean-up
+rm(tumours, dp_tumours.mx, dp_ref_tumours.mx, dp_alt_tumours.mx, low_alt_in_tumours, total, excluded)
+
+```
+
+# explore alt fraction
+
+Look separately in all, normal(s) and tumours  
+
+Suggestion:  
+Similar to common practice, keep only variants with alt fraction in tumours > 10%  
+
+Note:  
+Threshold of 5% or even 1% would do, if we consider histograms only, without following the common practice, however the total numbers of variants increases by 3000! 
+
+```{r alt_fraction}
+
+# alt fraction in all 8 columns - for orientation 
+mean(alt_fraction.mx, na.rm=T)
+median(alt_fraction.mx, na.rm=T)
+hist(alt_fraction.mx, labels = T, ylim=c(0,13000))
+hist(alt_fraction.mx[alt_fraction.mx<0.2], labels = T, ylim=c(0,8000))
+
+# alt fraction in normals (typically < 0.5%)
+normals <- c("IHCAP75_1F_N", "IHCAP75_BM_N", "IHCAP75_T1_N", "IHCAP75_T2_N")
+alt_fraction_normals.mx <- alt_fraction.mx[,normals]
+mean(alt_fraction_normals.mx, na.rm=T)
+median(alt_fraction_normals.mx, na.rm=T)
+hist(alt_fraction_normals.mx, labels = T, ylim=c(0,8000))
+hist(alt_fraction_normals.mx[alt_fraction_normals.mx<0.05], labels = T, ylim=c(0,8000))
+
+# alt fraction in tumours (typically > 1%)
+tumours <- c("IHCAP75_1F_T", "IHCAP75_BM_T", "IHCAP75_T1_T", "IHCAP75_T2_T")
+alt_fraction_tumours.mx <- alt_fraction.mx[,tumours]
+mean(alt_fraction_tumours.mx, na.rm=T)
+median(alt_fraction_tumours.mx, na.rm=T)
+hist(alt_fraction_tumours.mx, labels = T, ylim=c(0,8000))
+hist(alt_fraction_tumours.mx[alt_fraction_tumours.mx<0.5], labels = T, ylim=c(0,8000))
+abline(v=0.1, col="red")
+
+total <- sum(!is.na(alt_fraction_tumours.mx))
+total
+excluded <- 4340 + 2629
+excluded
+excluded/total
+
+hist(alt_fraction_tumours.mx[alt_fraction_tumours.mx<0.1], labels = T, ylim=c(0,2000))
+
+rm(normals, tumours, alt_fraction_normals.mx, alt_fraction_tumours.mx, total, excluded)
+
+```
+
+# select unfiltered variants present in multiple samples  
+
+```{r unfiltered_multi_sample_variants}
+
+call_count.udf <- function(gt_vector){sum(!is.na(gt_vector))}
+call_counts <- apply(gt_add.df,1,call_count.udf)
+table(call_counts)
+
+# Index of variants present in single sample only
+single_sample_variants <- call_counts == 2
+sum(!single_sample_variants)
+
+# Tables with variants detected in multiple samples
+gt_raw_multi_sample.df <- gt_add.df[!single_sample_variants,]
+dim(gt_raw_multi_sample.df)
+
+vv_raw_multi_sample.df <- vv.df[!single_sample_variants,]
+dim(vv_raw_multi_sample.df)
+
+ad_raw_multi_sample.df <- ad.df[!single_sample_variants,]
+dim(ad_raw_multi_sample.df)
+
+dp_raw_multi_sample.mx <- dp.mx[!single_sample_variants,]
+dim(dp_raw_multi_sample.mx)
+
+dp_raw_ref_multi_sample.mx <- dp_ref.mx[!single_sample_variants,]
+dim(dp_raw_ref_multi_sample.mx)
+
+dp_raw_alt_multi_sample.mx <- dp_alt.mx[!single_sample_variants,]
+dim(dp_raw_alt_multi_sample.mx)
+
+alt_raw_fraction_multi_sample.mx <- alt_fraction.mx[!single_sample_variants,]
+dim(alt_raw_fraction_multi_sample.mx)
+
+# clean-up
+rm(single_sample_variants, call_counts, call_count.udf)
+
+```
+
+# save_results
+
+```{r save_results}
+
+save.image("s01_explore_source.RData")
+
+```
+
+# final_section
+
+```{r final_section}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```
+

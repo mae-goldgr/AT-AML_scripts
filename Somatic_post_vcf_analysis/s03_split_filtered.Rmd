@@ -1,0 +1,398 @@
+---
+title: "explore and split filtered data for somatic aml"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+started: AL20May2018  
+last updated: AL20May2018  
+checked through: MG25May2018 on vep91 annotated data  
+
+<style>
+pre {
+  overflow-x: auto;
+}
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r set_width, echo=F}
+
+options(width = 999)
+
+```
+
+# Summary
+
+Estimate mean/median coverage  
+
+Split into groups:  
+- 1 group of filtered variants detected in more than one sample (39 variants total)  
+- 4 groups for variants detected in a single sample (one group per sample)  
+
+A group of non-filtered variants detected in more than one sample (114 variants)  
+was selected earlier (before filtering)  
+
+## Prioritising and analyses to be done later  
+
+Functional prioritising yet to be done later (in each group separately):  
+- Non-coding and synonymous - to exclude  
+- Missenses with low impact - to exclude  
+- Missenses with high impact - to keep, assuming either loss or gain of function  
+- LoF - to keep, assuming anti-oncogenes inactivation  
+- Genes of interest for ALL or other results for this patient  
+
+Dynamic analysis (yet to be done):  
+- Select variants with consistent sequential accumulation of somatic mutations in samples  
+- Select variants with "disappearing" of somatic variants in later samples  
+
+Other analyses that could be theoretically considered:  
+- further functional exploration: e.g. network/interaction, GO, HPO etc analyses  
+- assessment of somatic mutational signatiures: the dynamic assessment may look interesting in the paper (+ local collaboration?)  
+- assessment of clones within tumour: again, dynamic assessment of clones may look interesting in the paper (is it challenging??)  
+
+Assessment of LoH cannot be done until further reading about Mutect algorithm  
+Assessment of compound hets is not possible because of non-phased data  
+
+# start_section
+
+```{r start_section}
+
+Sys.time()
+rm(list=ls())
+graphics.off()
+
+library(knitr)
+base_folder="/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/filtering_somatic_with_AL_vep91/"
+setwd(base_folder)
+opts_knit$set(root.dir = base_folder)
+
+#library(dplyr)
+
+```
+
+# read_data
+
+```{r read_data}
+
+load("s02_filter.RData")
+rm(min_tumour_alt_fraction, min_normal_dp, max_normal_alt_count, min_tumour_dp, min_tumour_alt_count)
+
+```
+
+# check data
+
+```{r check_data}
+
+ls()
+
+dim(gt_add.df)
+str(gt_add.df)
+gt_add.df[1:5,1:5]
+
+dim(ad.df)
+str(ad.df)
+ad.df[1:5,1:5]
+
+dim(vv.df)
+str(vv.df)
+vv.df[1:5,1:6]
+
+dim(dp.mx)
+dp.mx[1:5,1:5]
+
+dim(dp_ref.mx)
+dp_ref.mx[1:5,1:5]
+
+dim(dp_alt.mx)
+dp_alt.mx[1:5,1:5]
+
+# check that data are in sync
+sum(rownames(gt_add.df) != rownames(ad.df))
+sum(rownames(gt_add.df) != rownames(dp.mx))
+sum(rownames(gt_add.df) != rownames(dp_ref.mx))
+sum(rownames(gt_add.df) != rownames(dp_alt.mx))
+sum(rownames(gt_add.df) != rownames(vv.df))
+
+# count 0-1-NA genotypes 
+summary(as.factor(as.matrix(gt_add.df)))
+
+# no variants with with all NA genotypes
+all_na.udf <- function(x){all(is.na(x))}
+all_na_variants <- apply(gt_add.df,1,all_na.udf)
+sum(all_na_variants)
+sum(!all_na_variants)
+
+# clean-up
+rm(all_na.udf,all_na_variants)
+
+```
+
+# mean/median coverage in filtered data
+
+```{r mean_coverage}
+
+# cumulative depth
+mean(dp.mx, na.rm=T)
+median(dp.mx, na.rm=T)
+hist(dp.mx, labels = T, ylim=c(0,1200))
+hist(dp.mx[dp.mx<200], labels = T, ylim=c(0,650))
+
+```
+
+# select filtered variants present in multiple samples  
+
+Immediately noticeable: **a known pathogenic KRAS variant** (rs104894362) is present in each tumour sample  
+KRAS was previously related to ALL e.g. see https://www.nature.com/articles/leu2015107  
+
+Also interesting: **a double-hit may be noted in IL7R** (Var000002144, Var000002145)  
+IL7R also was previously related to ALL: https://www.nature.com/articles/ng.924  
+
+I had no time to look further at this stage.  However, some other genes may also ring a bell.  
+
+```{r filtered_multi_sample_variants}
+
+call_count.udf <- function(gt_vector){sum(!is.na(gt_vector))}
+call_counts <- apply(gt_add.df,1,call_count.udf)
+table(call_counts)
+
+# Index of variants present in single sample only
+single_sample_variants <- call_counts == 2
+
+# Tables with variants detected in multiple samples
+gt_multi_sample.df <- gt_add.df[!single_sample_variants,]
+dim(gt_multi_sample.df)
+gt_multi_sample.df
+
+vv_multi_sample.df <- vv.df[!single_sample_variants,]
+dim(vv_multi_sample.df)
+vv_multi_sample.df
+
+ad_multi_sample.df <- ad.df[!single_sample_variants,]
+dim(ad_multi_sample.df)
+ad_multi_sample.df
+
+dp_multi_sample.mx <- dp.mx[!single_sample_variants,]
+dim(dp_multi_sample.mx)
+
+dp_ref_multi_sample.mx <- dp_ref.mx[!single_sample_variants,]
+dim(dp_ref_multi_sample.mx)
+
+dp_alt_multi_sample.mx <- dp_alt.mx[!single_sample_variants,]
+dim(dp_alt_multi_sample.mx)
+
+alt_fraction_multi_sample.mx <- alt_fraction.mx[!single_sample_variants,]
+dim(alt_fraction_multi_sample.mx)
+
+# export 39 variants in more than one sample
+dim(gt_multi_sample.df) # 39 x 8
+dim(ad_multi_sample.df) # 39 x 9
+dim(vv_multi_sample.df) # 39 x 30
+
+ihcap75_39_gtvv_merged.mx <- as.matrix(merge(vv_multi_sample.df, gt_multi_sample.df, by="row.names"))
+dim(ihcap75_39_gtvv_merged.mx) # 39 x 39
+write.table(ihcap75_39_gtvv_merged.mx, "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/filtering_somatic_with_AL_vep91/ihcap75_39_gtvv_merged.txt", quote = FALSE, sep = "\t", row.names=FALSE, col.names=TRUE)
+
+ihcap75_39_advv_merged.mx <- as.matrix(merge(vv_multi_sample.df, ad_multi_sample.df, by="row.names"))
+dim(ihcap75_39_advv_merged.mx) # 39 x 40
+write.table(ihcap75_39_advv_merged.mx, "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/filtering_somatic_with_AL_vep91/ihcap75_39_advv_merged.txt", quote = FALSE, sep = "\t", row.names=FALSE, col.names=TRUE)
+
+ihcap75_39_gtadvv_merged.mx <- as.matrix(merge(ihcap75_39_gtvv_merged.mx, ad_multi_sample.df, by="SplitVarID"))
+dim(ihcap75_39_gtadvv_merged.mx) # 39 x 47
+write.table(ihcap75_39_gtadvv_merged.mx, "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/filtering_somatic_with_AL_vep91/ihcap75_39_gtadvv_merged.txt", quote = FALSE, sep = "\t", row.names=FALSE, col.names=TRUE)
+
+# clean-up
+rm(call_counts, call_count.udf, ihcap75_39_gtvv_merged.mx, ihcap75_39_advv_merged.mx, ihcap75_39_gtadvv_merged.mx)
+
+```
+
+# select filtered variants present in a single sample only
+
+```{r single_sample_variants}
+
+gt_single_sample.df <- gt_add.df[single_sample_variants,]
+dim(gt_single_sample.df)
+
+vv_single_sample.df <- vv.df[single_sample_variants,]
+dim(vv_single_sample.df)
+
+ad_single_sample.df <- ad.df[single_sample_variants,]
+dim(ad_single_sample.df)
+
+dp_single_sample.mx <- dp.mx[single_sample_variants,]
+dim(dp_single_sample.mx)
+
+dp_ref_single_sample.mx <- dp_ref.mx[single_sample_variants,]
+dim(dp_ref_single_sample.mx)
+
+dp_alt_single_sample.mx <- dp_alt.mx[single_sample_variants,]
+dim(dp_alt_single_sample.mx)
+
+alt_fraction_single_sample.mx <- alt_fraction.mx[single_sample_variants,]
+dim(alt_fraction_single_sample.mx)
+
+ihcap75_540_gtvv_merged.mx <- as.matrix(merge(vv_single_sample.df, gt_single_sample.df, by="row.names"))
+dim(ihcap75_540_gtvv_merged.mx) # 540 x 69
+write.table(ihcap75_540_gtvv_merged.mx, "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/filtering_somatic_with_AL_vep91/ihcap75_540_gtvv_merged.txt", quote = FALSE, sep = "\t", row.names=FALSE, col.names=TRUE)
+
+ihcap75_540_gtadvv_merged.mx <- as.matrix(merge(ihcap75_540_gtvv_merged.mx, ad_single_sample.df, by="SplitVarID"))
+dim(ihcap75_540_gtadvv_merged.mx) # 540 x 77
+write.table(ihcap75_540_gtadvv_merged.mx, "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/filtering_somatic_with_AL_vep91/ihcap75_540_gtadvv_merged.txt", quote = FALSE, sep = "\t", row.names=FALSE, col.names=TRUE)
+
+rm(single_sample_variants, ihcap75_540_gtvv_merged.mx, ihcap75_540_gtadvv_merged.mx)
+
+```
+
+# select variants present in IHCAP75_1F only
+
+```{r IHCAP75_1F_variants}
+
+selected_variants <- which(gt_single_sample.df$IHCAP75_1F_T == 1)
+length(selected_variants)
+
+gt_IHCAP75_1F.df <- gt_single_sample.df[selected_variants,]
+dim(gt_IHCAP75_1F.df)
+gt_IHCAP75_1F.df[1:5,]
+
+vv_IHCAP75_1F.df <- vv_single_sample.df[selected_variants,]
+dim(vv_IHCAP75_1F.df)
+
+ad_IHCAP75_1F.df <- ad_single_sample.df[selected_variants,]
+dim(ad_IHCAP75_1F.df)
+
+dp_IHCAP75_1F.mx <- dp_single_sample.mx[selected_variants,]
+dim(dp_IHCAP75_1F.mx)
+
+dp_ref_IHCAP75_1F.mx <- dp_ref_single_sample.mx[selected_variants,]
+dim(dp_ref_IHCAP75_1F.mx)
+
+dp_alt_IHCAP75_1F.mx <- dp_alt_single_sample.mx[selected_variants,]
+dim(dp_alt_IHCAP75_1F.mx)
+
+alt_fraction_IHCAP75_1F.mx <- alt_fraction_single_sample.mx[selected_variants,]
+dim(alt_fraction_IHCAP75_1F.mx)
+
+rm(selected_variants)
+
+```
+
+# select variants present in IHCAP75_BM only
+
+```{r IHCAP75_BM_variants}
+
+selected_variants <- which(gt_single_sample.df$IHCAP75_BM_T == 1)
+length(selected_variants)
+
+gt_IHCAP75_BM.df <- gt_single_sample.df[selected_variants,]
+dim(gt_IHCAP75_BM.df)
+gt_IHCAP75_BM.df[1:5,]
+
+vv_IHCAP75_BM.df <- vv_single_sample.df[selected_variants,]
+dim(vv_IHCAP75_BM.df)
+
+ad_IHCAP75_BM.df <- ad_single_sample.df[selected_variants,]
+dim(ad_IHCAP75_BM.df)
+
+dp_IHCAP75_BM.mx <- dp_single_sample.mx[selected_variants,]
+dim(dp_IHCAP75_BM.mx)
+
+dp_ref_IHCAP75_BM.mx <- dp_ref_single_sample.mx[selected_variants,]
+dim(dp_ref_IHCAP75_BM.mx)
+
+dp_alt_IHCAP75_BM.mx <- dp_alt_single_sample.mx[selected_variants,]
+dim(dp_alt_IHCAP75_BM.mx)
+
+alt_fraction_IHCAP75_BM.mx <- alt_fraction_single_sample.mx[selected_variants,]
+dim(alt_fraction_IHCAP75_BM.mx)
+
+rm(selected_variants)
+
+```
+
+# select variants present in IHCAP75_T1 only
+
+```{r IHCAP75_T1_variants}
+
+selected_variants <- which(gt_single_sample.df$IHCAP75_T1_T == 1)
+length(selected_variants)
+
+gt_IHCAP75_T1.df <- gt_single_sample.df[selected_variants,]
+dim(gt_IHCAP75_T1.df)
+gt_IHCAP75_T1.df[1:5,]
+
+vv_IHCAP75_T1.df <- vv_single_sample.df[selected_variants,]
+dim(vv_IHCAP75_T1.df)
+
+ad_IHCAP75_T1.df <- ad_single_sample.df[selected_variants,]
+dim(ad_IHCAP75_T1.df)
+
+dp_IHCAP75_T1.mx <- dp_single_sample.mx[selected_variants,]
+dim(dp_IHCAP75_T1.mx)
+
+dp_ref_IHCAP75_T1.mx <- dp_ref_single_sample.mx[selected_variants,]
+dim(dp_ref_IHCAP75_T1.mx)
+
+dp_alt_IHCAP75_T1.mx <- dp_alt_single_sample.mx[selected_variants,]
+dim(dp_alt_IHCAP75_T1.mx)
+
+alt_fraction_IHCAP75_T1.mx <- alt_fraction_single_sample.mx[selected_variants,]
+dim(alt_fraction_IHCAP75_T1.mx)
+
+rm(selected_variants)
+
+```
+
+# select variants present in IHCAP75_T2 only
+
+```{r IHCAP75_T2_variants}
+
+selected_variants <- which(gt_single_sample.df$IHCAP75_T2_T == 1)
+length(selected_variants)
+
+gt_IHCAP75_T2.df <- gt_single_sample.df[selected_variants,]
+dim(gt_IHCAP75_T2.df)
+gt_IHCAP75_T2.df[1:5,]
+
+vv_IHCAP75_T2.df <- vv_single_sample.df[selected_variants,]
+dim(vv_IHCAP75_T2.df)
+
+ad_IHCAP75_T2.df <- ad_single_sample.df[selected_variants,]
+dim(ad_IHCAP75_T2.df)
+
+dp_IHCAP75_T2.mx <- dp_single_sample.mx[selected_variants,]
+dim(dp_IHCAP75_T2.mx)
+
+dp_ref_IHCAP75_T2.mx <- dp_ref_single_sample.mx[selected_variants,]
+dim(dp_ref_IHCAP75_T2.mx)
+
+dp_alt_IHCAP75_T2.mx <- dp_alt_single_sample.mx[selected_variants,]
+dim(dp_alt_IHCAP75_T2.mx)
+
+alt_fraction_IHCAP75_T2.mx <- alt_fraction_single_sample.mx[selected_variants,]
+dim(alt_fraction_IHCAP75_T2.mx)
+
+rm(selected_variants)
+
+```
+
+# save_results
+
+```{r save_results}
+
+save.image("s03_split_filtered.RData")
+
+```
+
+# final_section
+
+```{r final_section}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```
+

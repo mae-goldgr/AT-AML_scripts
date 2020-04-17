@@ -1,0 +1,267 @@
+---
+title: "Rsession_01_read_data"
+author: "Mae Goldgraben"
+date: "28May2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+  
+last updated: Mae Goldgraben, 28May2018  
+
+# VCF used for further analysis: ihcap_75_Aug17_vqsr_D0Q100
+
+# Notes
+
+Source data - IHCAP_75 AT-AML patient (Nextera - Illumina)
+5 time points: germline (age8), bone marrow - diagnosis, T1, T2, T5 (1 yr post diagnosis)
+
+Important note, exac and kgen data may not be correct (especially for any multiallelic sites) because GATK variant-to-table tool did not handle multiallelic sites correctly at the time of data generation. 
+
+Also germline variant calling was performed together with another small batch of samples, for a more reliable vsqr truth sensitivity model. *** Note, somatic variant calling also performed, as more appropriate for tumour sample analysis!!
+
+# start_section
+
+```{r start_section}
+
+# Time stamp
+Sys.time()
+
+# Clean up
+rm(list=ls())
+
+# Load libraries
+library(knitr)
+
+# Folders
+setwd("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters")
+source_data_folder <- "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/source_data"
+interim_data_folder <- "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/interim_data"
+
+```
+
+# copy_source_ngs_data_to_analysis_folder
+
+Done already once, hence all checks are FALSE in copying.
+
+```{r copy_source_ngs_data}
+
+src_folder <- "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/ihcap_75_Aug17_vqsr_D0Q100_std_sma_ann_v91_txt"
+tgt_folder <- source_data_folder
+
+prefix="ihcap_75_Aug17_vqsr_D0Q100_std_sma_ann_v91"
+
+gt_file <- paste(prefix,"GT_add.txt",sep="_")
+gq_file <- paste(prefix,"GQ.txt",sep="_")
+dp_file <- paste(prefix,"DP.txt",sep="_")
+vv_file <- paste(prefix,"VV.txt",sep="_")
+exac_file <- paste(prefix,"exac.txt",sep="_")
+kgen_file <- paste(prefix,"kgen.txt",sep="_")
+
+file.copy(
+  paste(src_folder, gt_file, sep="/"),
+  paste(tgt_folder, gt_file, sep="/"))
+
+file.copy(
+  paste(src_folder, gq_file, sep="/"),
+  paste(tgt_folder, gq_file, sep="/"))
+
+file.copy(
+  paste(src_folder, dp_file, sep="/"),
+  paste(tgt_folder, dp_file, sep="/"))
+
+file.copy(
+  paste(src_folder, vv_file, sep="/"),
+  paste(tgt_folder, vv_file, sep="/"))
+
+file.copy(
+  paste(src_folder, exac_file, sep="/"),
+  paste(tgt_folder, exac_file, sep="/"))
+
+file.copy(
+  paste(src_folder, kgen_file, sep="/"),
+  paste(tgt_folder, kgen_file, sep="/"))
+
+# Clean-up
+rm(src_folder, tgt_folder)
+
+```
+
+# read_data_into_Rsession
+
+```{r read_data}
+
+gt.df <- read.table(
+  paste(source_data_folder, gt_file, sep="/"), 
+  header=TRUE, row.names=1, sep="\t", quote="", stringsAsFactors = FALSE)
+
+gq.df <- read.table(
+  paste(source_data_folder, gq_file, sep="/"), 
+  header=TRUE, row.names=1, sep="\t", quote="", stringsAsFactors = FALSE)
+
+dp.df <- read.table(
+  paste(source_data_folder, dp_file, sep="/"), 
+  header=TRUE, row.names=1, sep="\t", quote="", stringsAsFactors = FALSE)
+
+vv_original.df <- read.table(
+  paste(source_data_folder, vv_file, sep="/"), 
+  header=TRUE, sep="\t", quote="", stringsAsFactors = FALSE)
+
+kgen.df <- read.table(
+  paste(source_data_folder, kgen_file, sep="/"), 
+  header=TRUE, sep="\t", quote="", stringsAsFactors = FALSE)
+
+exac.df <- read.table(
+  paste(source_data_folder, exac_file, sep="/"), 
+  header=TRUE, sep="\t", quote="", stringsAsFactors = FALSE)
+
+```
+
+# cross_check_data_table_rows_and_columns
+
+```{r cross_check_data_table_rows_and_columns}
+colnames(vv_original.df)
+
+#to look up what the annotations mean: www.ensembl.org/info/docs/tools/vep/script/vep_options.html
+#Old_vv.df <- read.table("/rds/project/erf33/rds-erf33-medgen/users/mae/RMSgermline_2017Jan/hc_vqsr_D0Q100_sma_ann_txt/hc_vqsr_D0Q100_sma_ann_VV.txt", header=TRUE, sep="\t", quote="")
+vv_original.df <- vv_original.df[c("SplitVarID", "TYPE", "ID", "CHROM", "POS", "REF", "ALT", "SYMBOL", "IMPACT", "Consequence",
+                           "AS_VQSLOD", "FILTER", "QUAL", "DP", 
+                           "Location", "cDNA_position", "CDS_position","EXON", "INTRON", "Codons", "Protein_position", "Amino_acids", "CLIN_SIG" , "SIFT_call", "SIFT_score", "PolyPhen_call", "PolyPhen_score","DOMAINS","HGVSc", "HGVSp",
+                           "HGVS_OFFSET", "NEAREST", "Feature_type", "Feature", "Allele", "ALLELE_NUM", "VARIANT_CLASS", "Existing_variation", "Uploaded_variation", "NEGATIVE_TRAIN_SITE","POSITIVE_TRAIN_SITE", "SYMBOL_SOURCE", "HGNC_ID", "SOMATIC", "PHENO", "GENE_PHENO","MOTIF_NAME", "MOTIF_POS", "HIGH_INF_POS", "MOTIF_SCORE_CHANGE", "Multiallelic",
+                           "gnomAD_AF", "gnomAD_AFR_AF", "gnomAD_AMR_AF","gnomAD_ASJ_AF", "gnomAD_EAS_AF", "gnomAD_FIN_AF", "gnomAD_NFE_AF", "gnomAD_SAS_AF", "gnomAD_OTH_AF","MAX_AF", "MAX_AF_POPS", "AC", "AF", "AN", "IH_AF", "IH_AC", "IH_AN")]
+
+colnames(vv_original.df)
+
+vv_rownames <- rownames(vv_original.df)
+a <- duplicated(vv_rownames)
+sum(a) # 0
+
+# Update rownames, where necessary
+rownames(vv_original.df) <- vv_original.df[,1]
+rownames(kgen.df) <- kgen.df[,1]
+rownames(exac.df) <- exac.df[,1]
+
+# Update colnames, when necessary
+colnames(gt.df) <- sub(".GT", "", colnames(gt.df))
+colnames(gq.df) <- sub(".GQ", "", colnames(gq.df))
+colnames(dp.df) <- sub(".DP", "", colnames(dp.df))
+
+
+# Clean-up
+rm(source_data_folder, prefix, vv_file, gt_file, gq_file, dp_file, kgen_file, exac_file, vv_rownames, a)
+
+```
+
+# check_data
+
+```{r check_data}
+
+dim(gt.df)
+str(gt.df, list.len=5)
+gt.df[1:5,1:5]
+
+dim(gq.df)
+str(gq.df, list.len=5)
+gq.df[1:5,1:5]
+
+dim(dp.df)
+str(dp.df, list.len=5)
+dp.df[1:5,1:5]
+
+dim(vv_original.df)
+str(vv_original.df)
+vv_original.df[1:5,1:5]
+
+dim(kgen.df)
+str(kgen.df)
+kgen.df[1:5,1:5]
+
+dim(exac.df)
+str(exac.df)
+exac.df[1:5,1:5]
+
+```
+
+# convert_data_frames_to_matrices
+
+```{r convert_data_frames_to_matrices}
+
+gt.mx <- as.matrix(gt.df)
+gq.mx <- as.matrix(gq.df)
+dp.mx <- as.matrix(dp.df)
+
+dim(gt.mx)
+class(gt.mx)
+gt.mx[1:5,1:5]
+
+dim(gq.mx)
+class(gq.mx)
+gq.mx[1:5,1:5]
+
+dim(dp.mx)
+class(dp.mx)
+dp.mx[1:5,1:5]
+
+rm(gt.df, gq.df, dp.df)
+
+```
+
+# check_consistency_of_rownames_and_colnames
+
+```{r check_consistency_of_rownames_and_colnames}
+
+vv_rownames <- rownames(vv_original.df)
+gt_rownames <- rownames(gt.mx)
+x <- vv_rownames != gt_rownames
+y <- vv_original.df[x,]
+dim(y)
+sum(vv_original.df$Multiallelic) # 760
+
+# Oddly...vv.df not sorted when exported...but variants do match gt/gq/dp
+# Sort by SplitVarID to match up
+vv.df <- vv_original.df[order(row.names(vv_original.df)),]
+
+# rownames
+sum(rownames(gt.mx) != rownames(gq.mx))
+sum(rownames(gt.mx) != rownames(dp.mx))
+sum(rownames(gt.mx) != rownames(vv_original.df)) # 0
+sum(rownames(gt.mx) != rownames(vv.df)) # 0
+sum(rownames(gt.mx) != rownames(kgen.df))
+sum(rownames(gt.mx) != rownames(exac.df))
+
+# colnames
+sum(colnames(gt.mx) != colnames(gq.mx))
+sum(colnames(gt.mx) != colnames(dp.mx))
+
+#clean-up
+rm(x, y, vv_rownames, gt_rownames, vv_original.df)
+
+```
+
+# convert_blanks_to_NAs
+
+```{r convert_blanks_to_NAs}
+
+NA -> vv.df[vv.df$Existing_variation == "", "Existing_variation"] # no blanks in other fields
+
+# No blanks in other tables
+
+```
+
+# save_data_environment
+
+```{r save_data}
+
+save.image(paste(interim_data_folder, "Rsession_01_read_data_germ.RData", sep="/"))
+
+```
+
+# final_section
+
+```{r final_section}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```

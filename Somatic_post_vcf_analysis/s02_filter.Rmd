@@ -1,0 +1,722 @@
+---
+title: "filter somatic aml data"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+started: AL19May2018  
+last updated: AL20May2018  
+checked through: MG25May2018 on vep91 annotated data    
+
+<style>
+pre {
+  overflow-x: auto;
+}
+pre code {
+  word-wrap: normal;
+  white-space: pre;
+}
+</style>
+
+```{r set_width, echo=F}
+
+options(width = 999)
+
+```
+
+# Summary
+
+Applying the following filters:  
+- Exclude variants with alt fraction in tumours < 10% (about **90%** of variants)  
+- Exclude variants with total depth in normals < 20  
+- Exclude variants where alt depth in normals > 1  
+- Exclude variants with total depth in tumours < 20  
+- Exclude variants with alt depth in tumours < 3  
+
+There was some redundancy in filters: some removed variants would be excluded by several filters at once  
+
+Because of the small number of sampes (just four T/N pairs) it was possible to use repeatitive code  
+instead of looping. This allowed to monitor filtering effect at each step in each sample  
+(at expence of the inflated code, which is harder to modify)  
+
+Number of non-NA genotypes drops from 7,802 to 674  
+Number of variants drops from 7,608 to 579  
+
+# start_section
+
+```{r start_section}
+
+Sys.time()
+rm(list=ls())
+graphics.off()
+
+library(knitr)
+base_folder="/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/ihcap_75_somatic_v2/filtering_somatic_with_AL_vep91/"
+setwd(base_folder)
+opts_knit$set(root.dir = base_folder)
+
+#library(dplyr)
+
+min_tumour_alt_fraction <- 0.1
+min_normal_dp <- 20
+max_normal_alt_count <- 1
+min_tumour_dp <- 20
+min_tumour_alt_count <- 3
+
+```
+
+# read_data
+
+```{r read_data}
+
+load("s01_explore_source.RData")
+
+```
+
+# check data
+
+```{r check_data}
+
+ls()
+
+dim(gt_add.df)
+str(gt_add.df)
+gt_add.df[1:5,1:5]
+
+dim(ad.df)
+str(ad.df)
+ad.df[1:5,1:5]
+
+dim(vv.df)
+str(vv.df)
+vv.df[1:5,1:6]
+
+dim(dp.mx)
+dp.mx[1:5,1:5]
+
+dim(dp_ref.mx)
+dp_ref.mx[1:5,1:5]
+
+dim(dp_alt.mx)
+dp_alt.mx[1:5,1:5]
+
+# check that data are in sync
+sum(rownames(gt_add.df) != rownames(ad.df))
+sum(rownames(gt_add.df) != rownames(dp.mx))
+sum(rownames(gt_add.df) != rownames(dp_ref.mx))
+sum(rownames(gt_add.df) != rownames(dp_alt.mx))
+sum(rownames(gt_add.df) != rownames(vv.df))
+
+# count 0-1-NA genotypes 
+summary(as.factor(as.matrix(gt_add.df)))
+
+# no variants with all NA genotypes
+all_na.udf <- function(x){all(is.na(x))}
+all_na_variants <- apply(gt_add.df,1,all_na.udf)
+sum(all_na_variants)
+sum(!all_na_variants)
+
+# clean-up
+rm(all_na.udf, all_na_variants)
+
+```
+
+# filter by alt fraction in tumour
+
+Remove variants with alt in tumours supported by less than 10% reads  
+
+Number of non-NA genotypes drops from 7,802 to 876  
+Number of variants drops from 7,608 to 769  
+
+### IHCAP75_1F
+
+```{r alt_fraction_IHCAP75_1F}
+
+# samlple
+sample <- "IHCAP75_1F"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+failed_variants <- which(alt_fraction.mx[,tumour] < min_tumour_alt_fraction)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, failed_variants)
+
+```
+
+### IHCAP75_BM
+
+```{r alt_fraction_IHCAP75_BM}
+
+# samlple
+sample <- "IHCAP75_BM"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+failed_variants <- which(alt_fraction.mx[,tumour] < min_tumour_alt_fraction)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, failed_variants)
+
+```
+
+### IHCAP75_T1
+
+```{r alt_fraction_IHCAP75_T1}
+
+# samlple
+sample <- "IHCAP75_T1"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+failed_variants <- which(alt_fraction.mx[,tumour] < min_tumour_alt_fraction)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, failed_variants)
+
+```
+
+### IHCAP75_T2
+
+```{r alt_fraction_IHCAP75_T2}
+
+# samlple
+sample <- "IHCAP75_T2"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+failed_variants <- which(alt_fraction.mx[,tumour] < min_tumour_alt_fraction)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, failed_variants)
+
+```
+
+### consolidate data after filtering by min alt fraction
+
+```{r consolidate_after_min_alt_fraction}
+
+# count 0-1-NA genotypes after filtering by min alt-fraction
+summary(as.factor(as.matrix(gt_add.df)))
+
+# get variants with all NA-s after filtering
+all_na.udf <- function(x){all(is.na(x))}
+all_na_variants <- apply(gt_add.df,1,all_na.udf)
+sum(all_na_variants)
+sum(!all_na_variants)
+
+# remove variants with all NA from first filter data
+gt_add.df <- gt_add.df[!all_na_variants,]
+dim(gt_add.df)
+gt_add.df[1:5,1:5]
+
+ad.df <- ad.df[!all_na_variants,]
+dim(ad.df)
+ad.df[1:5,1:5]
+
+vv.df <- vv.df[!all_na_variants,]
+dim(vv.df)
+vv.df[1:5,1:5]
+
+dp.mx <- dp.mx[!all_na_variants,]
+dim(dp.mx)
+dp.mx[1:5,1:5]
+
+dp_ref.mx <- dp_ref.mx[!all_na_variants,]
+dim(dp_ref.mx)
+dp_ref.mx[1:5,1:5]
+
+dp_alt.mx <- dp_alt.mx[!all_na_variants,]
+dim(dp_alt.mx)
+dp_alt.mx[1:5,1:5]
+
+alt_fraction.mx <- alt_fraction.mx[!all_na_variants,]
+dim(alt_fraction.mx)
+alt_fraction.mx[1:5,1:5]
+
+# clean-up
+rm(all_na.udf, all_na_variants)
+
+```
+
+# filter by depth and alt-count in normal(s)  
+
+- keep only variants with at least 20 overall reads in normal  
+- exclude variants with ALT depth in normal > 1  
+
+Number of non-NA genotypes drops from 876 to 816  
+Number of variants drops from 769 to 713  
+
+### IHCAP75_1F
+
+```{r dp_normal_IHCAP75_1F}
+
+# samlple
+sample <- "IHCAP75_1F"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+low_normal_dp <- which(dp.mx[,normal] < min_normal_dp)
+length(low_normal_dp)
+high_normal_alt_count <- which(dp_alt.mx[,normal] > max_normal_alt_count)
+length(high_normal_alt_count)
+failed_variants <- union(low_normal_dp, high_normal_alt_count)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, low_normal_dp, high_normal_alt_count, failed_variants)
+
+```
+
+### IHCAP75_BM
+
+```{r dp_normal_IHCAP75_BM}
+
+# samlple
+sample <- "IHCAP75_BM"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+low_normal_dp <- which(dp.mx[,normal] < min_normal_dp)
+length(low_normal_dp)
+high_normal_alt_count <- which(dp_alt.mx[,normal] > max_normal_alt_count)
+length(high_normal_alt_count)
+failed_variants <- union(low_normal_dp, high_normal_alt_count)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, low_normal_dp, high_normal_alt_count, failed_variants)
+
+```
+
+### IHCAP75_T1
+
+```{r dp_normal_IHCAP75_T1}
+
+# samlple
+sample <- "IHCAP75_T1"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+low_normal_dp <- which(dp.mx[,normal] < min_normal_dp)
+length(low_normal_dp)
+high_normal_alt_count <- which(dp_alt.mx[,normal] > max_normal_alt_count)
+length(high_normal_alt_count)
+failed_variants <- union(low_normal_dp, high_normal_alt_count)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, low_normal_dp, high_normal_alt_count, failed_variants)
+
+```
+
+### IHCAP75_T2
+
+```{r dp_normal_IHCAP75_T2}
+
+# samlple
+sample <- "IHCAP75_T2"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+low_normal_dp <- which(dp.mx[,normal] < min_normal_dp)
+length(low_normal_dp)
+high_normal_alt_count <- which(dp_alt.mx[,normal] > max_normal_alt_count)
+length(high_normal_alt_count)
+failed_variants <- union(low_normal_dp, high_normal_alt_count)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, low_normal_dp, high_normal_alt_count, failed_variants)
+
+```
+
+### consolidate data after filtering by depth and alt-count in normals  
+
+```{r consolidate_after_dp_normal}
+
+# count 0-1-NA genotypes after filtering by min alt-fraction
+summary(as.factor(as.matrix(gt_add.df)))
+
+# get variants with all NA-s after filtering
+all_na.udf <- function(x){all(is.na(x))}
+all_na_variants <- apply(gt_add.df,1,all_na.udf)
+sum(all_na_variants)
+sum(!all_na_variants)
+
+# remove the variant with all NA from data
+gt_add.df <- gt_add.df[!all_na_variants,]
+dim(gt_add.df)
+gt_add.df[1:5,1:5]
+
+ad.df <- ad.df[!all_na_variants,]
+dim(ad.df)
+ad.df[1:5,1:5]
+
+vv.df <- vv.df[!all_na_variants,]
+dim(vv.df)
+vv.df[1:5,1:5]
+
+dp.mx <- dp.mx[!all_na_variants,]
+dim(dp.mx)
+dp.mx[1:5,1:5]
+
+dp_ref.mx <- dp_ref.mx[!all_na_variants,]
+dim(dp_ref.mx)
+dp_ref.mx[1:5,1:5]
+
+dp_alt.mx <- dp_alt.mx[!all_na_variants,]
+dim(dp_alt.mx)
+dp_alt.mx[1:5,1:5]
+
+alt_fraction.mx <- alt_fraction.mx[!all_na_variants,]
+dim(alt_fraction.mx)
+alt_fraction.mx[1:5,1:5]
+
+# clean-up
+rm(all_na.udf, all_na_variants)
+
+```
+
+# filter by depth and alt-count in tumours  
+
+- keep only variants with at least 20 overall reads in tumour  
+- exclude variants with less than 3 reads supporting alt in tumour  
+
+Number of non-NA genotypes drops from 816 to 674  
+Number of variants drops from 713 to 579  
+
+### IHCAP75_1F
+
+```{r dp_tumour_IHCAP75_1F}
+
+# samlple
+sample <- "IHCAP75_1F"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+low_tumour_dp <- which(dp.mx[,tumour] < min_tumour_dp)
+length(low_tumour_dp)
+low_tumour_alt_count <- which(dp_alt.mx[,tumour] < min_tumour_alt_count)
+length(low_tumour_alt_count)
+failed_variants <- union(low_tumour_dp, low_tumour_alt_count)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, low_tumour_dp, low_tumour_alt_count, failed_variants)
+
+```
+
+### IHCAP75_BM
+
+```{r dp_tumour_IHCAP75_BM}
+
+# samlple
+sample <- "IHCAP75_BM"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+low_tumour_dp <- which(dp.mx[,tumour] < min_tumour_dp)
+length(low_tumour_dp)
+low_tumour_alt_count <- which(dp_alt.mx[,tumour] < min_tumour_alt_count)
+length(low_tumour_alt_count)
+failed_variants <- union(low_tumour_dp, low_tumour_alt_count)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, low_tumour_dp, low_tumour_alt_count, failed_variants)
+
+```
+
+### IHCAP75_T1
+
+```{r dp_tumour_IHCAP75_T1}
+
+# samlple
+sample <- "IHCAP75_T1"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+low_tumour_dp <- which(dp.mx[,tumour] < min_tumour_dp)
+length(low_tumour_dp)
+low_tumour_alt_count <- which(dp_alt.mx[,tumour] < min_tumour_alt_count)
+length(low_tumour_alt_count)
+failed_variants <- union(low_tumour_dp, low_tumour_alt_count)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, low_tumour_dp, low_tumour_alt_count, failed_variants)
+
+```
+
+### IHCAP75_T2
+
+```{r dp_tumour_IHCAP75_T2}
+
+# samlple
+sample <- "IHCAP75_T2"
+
+# columns
+normal <- paste(sample, "_N", sep="")
+tumour <- paste(sample, "_T", sep="")
+
+# check data before
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+
+# get failed variants
+low_tumour_dp <- which(dp.mx[,tumour] < min_tumour_dp)
+length(low_tumour_dp)
+low_tumour_alt_count <- which(dp_alt.mx[,tumour] < min_tumour_alt_count)
+length(low_tumour_alt_count)
+failed_variants <- union(low_tumour_dp, low_tumour_alt_count)
+length(failed_variants)
+
+# filter out failed variants
+NA -> gt_add.df[failed_variants, normal]
+NA -> gt_add.df[failed_variants, tumour] 
+
+# check data after
+summary(as.factor(as.matrix(gt_add.df[,normal])))
+summary(as.factor(as.matrix(gt_add.df[,tumour])))
+  
+# clean-up
+rm(sample, normal, tumour, low_tumour_dp, low_tumour_alt_count, failed_variants)
+
+```
+
+### consolidate data after filtering by depth and alt-count in tumours  
+
+```{r consolidate_after_dp_tumour}
+
+# count 0-1-NA genotypes after filtering by min alt-fraction
+summary(as.factor(as.matrix(gt_add.df)))
+
+# get variants with all NA-s after filtering
+all_na.udf <- function(x){all(is.na(x))}
+all_na_variants <- apply(gt_add.df,1,all_na.udf)
+sum(all_na_variants)
+sum(!all_na_variants)
+
+# remove the variant with all NA from data
+gt_add.df <- gt_add.df[!all_na_variants,]
+dim(gt_add.df)
+gt_add.df[1:5,1:5]
+
+ad.df <- ad.df[!all_na_variants,]
+dim(ad.df)
+ad.df[1:5,1:5]
+
+vv.df <- vv.df[!all_na_variants,]
+dim(vv.df)
+vv.df[1:5,1:5]
+
+dp.mx <- dp.mx[!all_na_variants,]
+dim(dp.mx)
+dp.mx[1:5,1:5]
+
+dp_ref.mx <- dp_ref.mx[!all_na_variants,]
+dim(dp_ref.mx)
+dp_ref.mx[1:5,1:5]
+
+dp_alt.mx <- dp_alt.mx[!all_na_variants,]
+dim(dp_alt.mx)
+dp_alt.mx[1:5,1:5]
+
+alt_fraction.mx <- alt_fraction.mx[!all_na_variants,]
+dim(alt_fraction.mx)
+alt_fraction.mx[1:5,1:5]
+
+# clean-up
+rm(all_na.udf, all_na_variants)
+
+```
+
+# save_results
+
+```{r save_results}
+
+save.image("s02_filter.RData")
+
+```
+
+# final_section
+
+```{r final_section}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```
+

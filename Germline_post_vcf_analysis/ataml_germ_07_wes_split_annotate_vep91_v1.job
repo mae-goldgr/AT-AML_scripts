@@ -1,0 +1,74 @@
+Job description file to split and annotate VCF
+Last updated: Mae Goldgraben 26May2018
+
+TEMPLATE v1
+
+=========== Data location and analysis settings =============
+
+Data server: admin@mgqnap2.medschl.cam.ac.uk
+Project location: /share/mae
+
+project: IHCAP75_atm_aml/germline_analysis_all_timepts
+dataset: ihcap_75_Aug17_vqsr_D0Q100_std
+
+======================= HPC settings ========================
+
+working_folder: /rds/project/erf33/rds-erf33-medgen/users/mae
+
+Account to use on HPC: TISCHKOWITZ-SL2-CPU
+Max time to request (hrs.min.sec): 03.00.00
+
+==================== Pipeline summary =======================
+
+#This step 
+# - splits multiallelic variants into separate lines 
+# - annotates with AN, AC, AF from 1k & Exac
+# - adds rs- IDs from and dbSNP
+# - annotates with VEP
+
+===================== Standard settings =====================
+
+scripts_folder: /rds/project/erf33/rds-erf33-medgen/scripts/wes_pipeline_01.18.1/p07_wes_split_annotate_vep91
+start_script: a00_start_pipeline.sh
+
+Tools
+-----
+
+tools_folder: /rds/project/erf33/rds-erf33-medgen/tools
+java: java/jre1.8.0_40/bin/java
+gatk: gatk/gatk-3.6-0/GenomeAnalysisTK.jar
+
+ensembl_api_folder: ensembl
+ensembl_version: v91
+vep_script: ensembl-vep/vep
+vep_cache: ensembl-vep/grch37_cache
+
+htslib_bin_folder: htslib/htslib-1.3.1/bin
+
+Resources
+---------
+
+resources_folder: /rds/project/erf33/rds-erf33-medgen/resources
+
+decompressed_bundle_folder: gatk_bundle/b37/decompressed
+ref_genome: human_g1k_v37.fasta
+dbsnp_138: dbsnp_138.b37.vcf
+
+targets_folder: illumina_nextera
+targets_intervals: nexterarapidcapture_exome_targetedregions_v1.2.b37.intervals
+
+kgen_folder: phase3_1k_release20130502/vcfs
+kgen_split_vcf: ALL.wgs.phase3_shapeit2_mvncall_integrated_v5a.20130502.sites.fixed.split.vcf
+
+exac_folder: exac
+exac_non_tcga_split_vcf: ExAC_nonTCGA.r0.3.1.sites.vep.filt.split.vcf.gz
+
+Working sub-folders
+-------------------
+
+suffix: sma_ann_v91
+
+Additional settings
+-------------------
+
+vep_fields: Location,Allele,Uploaded_variation,SYMBOL,Consequence,IMPACT,Codons,Amino_acids,cDNA_position,CDS_position,Protein_position,VARIANT_CLASS,SIFT,PolyPhen,Existing_variation,CLIN_SIG,SOMATIC,PHENO,SYMBOL_SOURCE,HGNC_ID,GENE_PHENO,MOTIF_NAME,MOTIF_POS,HIGH_INF_POS,MOTIF_SCORE_CHANGE,NEAREST,MAX_AF,MAX_AF_POPS,gnomAD_AF,gnomAD_AFR_AF,gnomAD_AMR_AF,gnomAD_ASJ_AF,gnomAD_EAS_AF,gnomAD_FIN_AF,gnomAD_NFE_AF,gnomAD_OTH_AF,gnomAD_SAS_AF,EXON,INTRON,DOMAINS,HGVSc,HGVSp,HGVS_OFFSET,Feature_type,Feature,ALLELE_NUM

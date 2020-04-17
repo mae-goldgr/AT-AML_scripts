@@ -1,0 +1,195 @@
+---
+title: "Rsession_04_add_eve_germ"
+author: "Mae Goldgraben"
+date: "28May2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+last updated: Mae Goldgraben, 28May2018  
+
+# Summary
+
+The script performs the following:  
+
+- check the data  
+
+- incorporate eve scores by gene and by exon (as calculated by Eleanor Fewings) - for b37 only! 
+
+- save data  
+
+# start_section
+
+```{r start_section}
+
+# Time stamp
+Sys.time()
+
+# Clean up
+rm(list=ls())
+
+# Load libraries
+library(knitr)
+library(dplyr)
+library(sqldf)
+
+# Folders
+setwd("/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters")
+source_data_folder <- "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/source_data"
+interim_data_folder <- "/rds/project/erf33/rds-erf33-medgen/users/mae/IHCAP75_atm_aml/germline_analysis_all_timepts/Rscripts_and_filters/interim_data"
+
+```
+
+# load_data
+
+```{r load_data}
+
+load(paste(interim_data_folder, "Rsession_03_add_kgen_exac_filter_common_germ.RData", sep="/"))
+
+```
+
+# check_data
+
+```{r check_data}
+ls()
+
+dim(cleaned_gt_rare.mx)
+class(cleaned_gt_rare.mx)
+cleaned_gt_rare.mx[1:5,1:5]
+
+dim(cleaned_vv_rare.df)
+class(cleaned_vv_rare.df)
+cleaned_vv_rare.df[1:5,1:5]
+
+dim(cleaned_gt_rarest.mx)
+class(cleaned_gt_rarest.mx)
+cleaned_gt_rarest.mx[1:5,1:5]
+
+dim(cleaned_vv_rarest.df)
+class(cleaned_vv_rarest.df)
+cleaned_vv_rarest.df[1:5,1:5]
+
+# Check consistency of colnames and rownames
+sum(rownames(cleaned_gt_rare.mx) != rownames(cleaned_vv_rare.df))
+sum(rownames(cleaned_gt_rarest.mx) != rownames(cleaned_vv_rarest.df))
+
+```
+
+# add_EVE_score_values
+
+- Note: scores annotated using b37 exon locations
+
+```{r add_EVE_score_values}
+
+#Add column with rownames to vv files
+cleaned_vv_rare.df$row <- row.names(cleaned_vv_rare.df)
+cleaned_vv_rarest.df$row <- row.names(cleaned_vv_rarest.df)
+
+#Load eve files
+eve.gene.df <- read.table("/rds/project/erf33/rds-erf33-medgen/users/eleanor/2015-16/1kgenomes_analysis/variability_output/variability_thresholds_combinedscore_geneann_nonsyn_populations_v2_20160716.csv", header=TRUE, sep=",")
+
+eve.exon.df <-read.table("/rds/project/erf33/rds-erf33-medgen/users/eleanor/2015-16/1kgenomes_analysis/variability_output/variability_thresholds_nonsyn_populations_complete_20160609.csv", header=TRUE, sep=",")
+
+#Select columns from eve gene score & add to vv files
+short_eve_gene_df <- subset(eve.gene.df, select= c("SYMBOL", "COMBINED_SCORE", "Cscore", "COMBINED_SCORE_EUR", "Cscore_EUR"))
+colnames(short_eve_gene_df) <- c("SYMBOL", "EVE_COMBINED_SCORE", "EVE_Cscore", "EVE_COMBINED_SCORE_EUR", "EVE_Cscore_EUR")
+
+cleaned_vv_rare_eve_gene_df <- merge(cleaned_vv_rare.df, short_eve_gene_df, by="SYMBOL", all.x = TRUE)
+cleaned_vv_rarest_eve_gene_df <- merge(cleaned_vv_rarest.df, short_eve_gene_df, by="SYMBOL", all.x = TRUE)
+
+#Select columns from eve exon score
+short_eve_exon_df <- subset(eve.exon.df, select= c("START", "STOP", "CHROM", "VARIABILITY", "score", "EUR_VARIABILITY", "EUR_score"))
+colnames(short_eve_exon_df) <- c("START", "STOP", "CHROM", "EVE", "EVE_score", "EUR_EVE", "EUR_EVE_score")
+
+#Remove periods from column names and vv file names for sqldf
+colnames(cleaned_vv_rare_eve_gene_df) <- gsub("\\.","_",colnames(cleaned_vv_rare_eve_gene_df))
+colnames(cleaned_vv_rarest_eve_gene_df) <- gsub("\\.","_",colnames(cleaned_vv_rarest_eve_gene_df))
+
+#Join eve exon scores to vv files with eve genes scores using sql script (calculating, based on chrom position where the beginning and end of gene is denoted - all based on b37!!)
+cleaned_vv_rare_eve_exon_df <- sqldf("select * from cleaned_vv_rare_eve_gene_df f1 left join short_eve_exon_df f2 on (f1.POS >= f2.START and f1.POS <= f2.STOP and f1.CHROM==f2.CHROM) ")
+cleaned_vv_rarest_eve_exon_df <- sqldf("select * from cleaned_vv_rarest_eve_gene_df f1 left join short_eve_exon_df f2 on (f1.POS >= f2.START and f1.POS <= f2.STOP and f1.CHROM==f2.CHROM) ")
+
+#Remove duplicated rows
+dim(cleaned_vv_rare_eve_exon_df) # 15,853 x 84
+cleaned_vv_rare_eve_exon_clean.df <- cleaned_vv_rare_eve_exon_df[!duplicated(cleaned_vv_rare_eve_exon_df[c("POS", "CHROM", "REF", "ALT")]),]
+dim(cleaned_vv_rare_eve_exon_clean.df) # 10,284 x 84
+
+dim(cleaned_vv_rarest_eve_exon_df) # 8,939 x 84
+cleaned_vv_rarest_eve_exon_clean.df <- cleaned_vv_rarest_eve_exon_df[!duplicated(cleaned_vv_rarest_eve_exon_df[c("POS", "CHROM", "REF", "ALT")]),]
+dim(cleaned_vv_rarest_eve_exon_clean.df) # 5,993 x 84
+
+#Remove periods from column names in vv file names to match for next step
+colnames(cleaned_vv_rare.df) <- gsub("\\.","_",colnames(cleaned_vv_rare.df))
+colnames(cleaned_vv_rarest.df) <- gsub("\\.","_",colnames(cleaned_vv_rarest.df))
+
+#Shorten the columns retained for each vv_eve file
+cleaned_vv_rare_eve.df <- subset(cleaned_vv_rare_eve_exon_clean.df, select = c(colnames(cleaned_vv_rare.df), "EVE_COMBINED_SCORE", "EVE_Cscore", "EVE_COMBINED_SCORE_EUR", "EVE_Cscore_EUR", "EVE", "EVE_score", "EUR_EVE", "EUR_EVE_score"))
+cleaned_vv_rarest_eve.df <- subset(cleaned_vv_rarest_eve_exon_clean.df, select = c(colnames(cleaned_vv_rarest.df), "EVE_COMBINED_SCORE", "EVE_Cscore", "EVE_COMBINED_SCORE_EUR", "EVE_Cscore_EUR", "EVE", "EVE_score", "EUR_EVE", "EUR_EVE_score"))
+
+#Sort the tables by VariantIDs and rename rows by VariantIDs
+cleaned_vv_rare_eve.df <- cleaned_vv_rare_eve.df[order(cleaned_vv_rare_eve.df[,"SplitVarID"]),]
+row.names(cleaned_vv_rare_eve.df) <- cleaned_vv_rare_eve.df$SplitVarID
+
+cleaned_vv_rarest_eve.df <- cleaned_vv_rarest_eve.df[order(cleaned_vv_rarest_eve.df[,"SplitVarID"]),]
+row.names(cleaned_vv_rarest_eve.df) <- cleaned_vv_rarest_eve.df$SplitVarID
+
+#Clean up
+rm(eve.gene.df, eve.exon.df, short_eve_gene_df, short_eve_exon_df)
+rm(cleaned_vv_rare_eve_exon_df, cleaned_vv_rare_eve_gene_df, cleaned_vv_rare_eve_exon_clean.df, cleaned_vv_rarest_eve_exon_df, cleaned_vv_rarest_eve_gene_df, cleaned_vv_rarest_eve_exon_clean.df)
+
+```
+
+# Further_clean_up_of_files
+
+```{r clean_up_of_files}
+
+rm(cleaned_vv_rare.df, cleaned_vv_rarest.df)
+
+```
+
+# data_summary
+
+```{r data_summary}
+
+ls()
+
+dim(cleaned_gt_rare.mx)
+class(cleaned_gt_rare.mx)
+cleaned_gt_rare.mx[1:5,1:5]
+
+dim(cleaned_vv_rare_eve.df)
+class(cleaned_vv_rare_eve.df)
+cleaned_vv_rare_eve.df[1:5,1:5]
+
+dim(cleaned_gt_rarest.mx)
+class(cleaned_gt_rarest.mx)
+cleaned_gt_rarest.mx[1:5,1:5]
+
+dim(cleaned_vv_rarest_eve.df)
+class(cleaned_vv_rarest_eve.df)
+cleaned_vv_rarest_eve.df[1:5,1:5]
+
+# Check consistency of colnames and rownames
+sum(rownames(cleaned_gt_rare.mx) != rownames(cleaned_vv_rare_eve.df))
+sum(rownames(cleaned_gt_rarest.mx) != rownames(cleaned_vv_rarest_eve.df))
+
+```
+
+# save_data
+
+```{r save_data}
+
+save.image(paste(interim_data_folder, "Rsession_04_add_eve_germ.RData", sep="/"))
+
+```
+
+# final_section
+
+```{r final_section}
+
+ls()
+sessionInfo()
+Sys.time()
+
+```
