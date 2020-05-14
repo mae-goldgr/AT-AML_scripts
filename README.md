@@ -1,9 +1,11 @@
 # Publication_scripts: Genomic profiling of AT-AML
 
 Manuscript: Goldgraben et al Pediatric Blood and Cancer 2020
+
 https://onlinelibrary.wiley.com/doi/full/10.1002/pbc.28354
 
 Scripts used in publication. This repo is no longer in development.
+
 BAMs (GRCh37) and VCFs are available on EGA (EGAS00001004392).
 
 
